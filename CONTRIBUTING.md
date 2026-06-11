@@ -31,7 +31,7 @@ python3 tools/opl_migrate.py --help
 python3 -m pytest tests/ -v
 ```
 
-There are 137 tests covering unit tests and integration tests (full adoption workflow).
+There are 100+ tests covering unit tests and integration tests (full adoption workflow).
 
 To run only unit tests:
 
