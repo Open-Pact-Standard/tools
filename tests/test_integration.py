@@ -6,6 +6,7 @@ Tests the end-to-end flow:
   3. opl_check.py --skip-remote       -> validates full compliance
   4. opl_registry_gen.py --non-interactive -> generates REGISTRY.json
   5. opl_migrate.py --non-interactive  -> detects old license and scans files
+  6. opl_x402.py generate/config/chains  -> x402 payment integration code generation
 """
 from __future__ import annotations
 
@@ -466,3 +467,198 @@ class TestEdgeCases:
 
         # But main.py SHOULD have SPDX header
         assert "SPDX" in (sample_project / "src" / "main.py").read_text()
+
+
+# ============================================================
+# Workflow 6: x402 payment generation
+# ============================================================
+
+class TestX402Workflow:
+    """Test x402 payment endpoint generation and configuration."""
+
+    def test_generate_fastapi_endpoint(self, tmp_path):
+        """Generate a FastAPI endpoint with x402 payments."""
+        out = tmp_path / "endpoint.py"
+        result = run_tool(
+            "opl_x402.py", "generate",
+            "--framework", "fastapi",
+            "--price", "0.01",
+            "--asset", "USDC",
+            "--chain", "base",
+            "--output", str(out),
+            cwd=tmp_path,
+        )
+        assert result.returncode == 0, f"Generate failed: {result.stderr}"
+        assert out.exists()
+        code = out.read_text()
+        assert "FastAPI" in code
+        assert "402" in code
+        assert "x-payment-signature" in code
+        assert "X402" in code
+
+    def test_generate_flask_endpoint(self, tmp_path):
+        """Generate a Flask endpoint with x402 payments."""
+        out = tmp_path / "endpoint.py"
+        result = run_tool(
+            "opl_x402.py", "generate",
+            "--framework", "flask",
+            "--price", "1.00",
+            "--asset", "USDC",
+            "--chain", "base",
+            "--output", str(out),
+            cwd=tmp_path,
+        )
+        assert result.returncode == 0, f"Generate failed: {result.stderr}"
+        assert out.exists()
+        code = out.read_text()
+        assert "flask" in code.lower()
+        assert "402" in code
+        assert "jsonify" in code
+
+    def test_generate_default_framework(self, tmp_path):
+        """Default framework should be fastapi."""
+        result = run_tool(
+            "opl_x402.py", "generate",
+            "--price", "0.01",
+            cwd=tmp_path,
+        )
+        assert result.returncode == 0
+        assert "FastAPI" in result.stdout
+
+    def test_generate_to_stdout(self, tmp_path):
+        """Without --output, code goes to stdout."""
+        result = run_tool(
+            "opl_x402.py", "generate",
+            "--price", "0.01",
+            cwd=tmp_path,
+        )
+        assert result.returncode == 0
+        assert len(result.stdout) > 100  # Should have substantial output
+        assert "x402" in result.stdout.lower()
+
+    def test_config_generates_valid_json(self, tmp_path):
+        """Config command should produce valid JSON."""
+        out = tmp_path / "x402.json"
+        result = run_tool(
+            "opl_x402.py", "config",
+            "--price", "5.00",
+            "--asset", "USDC",
+            "--chain", "base",
+            "--recipient", "0xABC123",
+            "--output", str(out),
+            cwd=tmp_path,
+        )
+        assert result.returncode == 0
+        assert out.exists()
+        data = json.loads(out.read_text())
+        assert data["x402Version"] == 1
+        assert data["config"]["price"] == 5.00
+        assert data["config"]["asset"] == "USDC"
+        assert data["config"]["network"] == "base"
+        assert data["config"]["payTo"] == "0xABC123"
+        assert len(data["paymentChallenges"]) == 1
+
+    def test_config_to_stdout(self, tmp_path):
+        """Config to stdout should produce valid JSON."""
+        result = run_tool(
+            "opl_x402.py", "config",
+            "--price", "1.00",
+            cwd=tmp_path,
+        )
+        assert result.returncode == 0
+        data = json.loads(result.stdout)
+        assert "x402Version" in data
+
+    def test_config_warns_on_default_recipient(self, tmp_path):
+        """Using default zero-address should print a warning."""
+        result = run_tool(
+            "opl_x402.py", "config",
+            "--price", "1.00",
+            cwd=tmp_path,
+        )
+        assert result.returncode == 0
+        assert "WARNING" in result.stderr or "unrecoverable" in result.stderr
+
+    def test_chains_lists_supported_networks(self, tmp_path):
+        """Chains command should list all supported networks."""
+        result = run_tool("opl_x402.py", "chains", cwd=tmp_path)
+        assert result.returncode == 0
+        assert "base" in result.stdout
+        assert "ethereum" in result.stdout
+        assert "solana" in result.stdout
+        assert "polygon" in result.stdout
+
+    def test_assets_lists_supported_stablecoins(self, tmp_path):
+        """Assets command should list all supported stablecoins."""
+        result = run_tool("opl_x402.py", "assets", cwd=tmp_path)
+        assert result.returncode == 0
+        assert "USDC" in result.stdout
+        assert "USDT" in result.stdout
+        assert "DAI" in result.stdout
+        assert "EURC" in result.stdout
+
+    def test_generate_rejects_invalid_price(self, tmp_path):
+        """Invalid price should fail with error."""
+        result = run_tool(
+            "opl_x402.py", "generate",
+            "--price", "abc",
+            cwd=tmp_path,
+        )
+        assert result.returncode != 0
+        assert "Error" in result.stderr or "Invalid" in result.stderr
+
+    def test_generate_rejects_negative_price(self, tmp_path):
+        """Negative price should fail."""
+        result = run_tool(
+            "opl_x402.py", "generate",
+            "--price", "-5.00",
+            cwd=tmp_path,
+        )
+        assert result.returncode != 0
+
+    def test_generate_rejects_unsupported_asset(self, tmp_path):
+        """Unsupported asset should fail."""
+        result = run_tool(
+            "opl_x402.py", "generate",
+            "--price", "1.00",
+            "--asset", "BTC",
+            cwd=tmp_path,
+        )
+        assert result.returncode != 0
+
+    def test_generate_rejects_unsupported_chain(self, tmp_path):
+        """Unsupported chain should fail."""
+        result = run_tool(
+            "opl_x402.py", "generate",
+            "--price", "1.00",
+            "--chain", "bitcoin",
+            cwd=tmp_path,
+        )
+        assert result.returncode != 0
+
+    def test_generate_with_custom_description(self, tmp_path):
+        """Custom description should appear in generated code."""
+        result = run_tool(
+            "opl_x402.py", "generate",
+            "--price", "0.01",
+            "--description", "My premium API",
+            cwd=tmp_path,
+        )
+        assert result.returncode == 0
+        assert "My premium API" in result.stdout
+
+    def test_config_with_different_chain_and_asset(self, tmp_path):
+        """Config should work with different chains and assets."""
+        result = run_tool(
+            "opl_x402.py", "config",
+            "--price", "10.00",
+            "--asset", "DAI",
+            "--chain", "polygon",
+            "--recipient", "0xDEF456",
+            cwd=tmp_path,
+        )
+        assert result.returncode == 0
+        data = json.loads(result.stdout)
+        assert data["config"]["asset"] == "DAI"
+        assert data["config"]["network"] == "polygon"
+
