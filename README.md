@@ -1,4 +1,6 @@
 # Open-Pact Standard — Adoption Tools
+
+*Licensed under the [Open-Pact License v1.3.1](LICENSE.md). See [NOTICE](NOTICE) for commercial use terms.*
 [![codecov](https://codecov.io/gh/Open-Pact-Standard/tools/graph/badge.svg)](https://codecov.io/gh/Open-Pact-Standard/tools)
 
 Free, open-source tools for adopting the [Open-Pact License (OPL) v1.3.1](https://github.com/Open-Pact-Standard/license).
