@@ -698,7 +698,7 @@ class TestCLIHelpSmoke:
         # Some tools (opl_init, opl_registry_gen) crash with EOFError when they try
         # to read interactive input in a non-interactive context. This is expected.
         # Other tools show help or report missing required args.
-        assert result.returncode in (0, 1, 1),             f"{tool} exited with unexpected code {result.returncode}"
+        assert result.returncode in (0, 1, 2),             f"{tool} exited with unexpected code {result.returncode}"
         # Should not have a Python syntax/import error
         assert "SyntaxError" not in result.stderr, f"{tool} has a syntax error: {result.stderr}"
         assert "ModuleNotFoundError" not in result.stderr, f"{tool} is missing a dependency: {result.stderr}"
