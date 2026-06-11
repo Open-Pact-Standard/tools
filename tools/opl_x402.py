@@ -238,6 +238,7 @@ def generate_config(price: float, asset: str, chain: str,
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="x402 Payment Generator for OPL -- generates HTTP 402 crypto payment integration code")
+    parser.add_argument("--version", action="version", version="OPL Adoption Tools 1.2.0")
     sub = parser.add_subparsers(dest="command", help="Available commands")
 
     gen = sub.add_parser("generate", help="Generate a payment endpoint for a Python framework")

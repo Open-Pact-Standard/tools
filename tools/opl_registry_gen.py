@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: OPL-1.3.1
 """OPL Registry Generator
 
 Generates a REGISTRY.json file for Tier 1 adopters of the Open-Pact License v1.3.1.
@@ -62,6 +63,7 @@ def ask_yes_no(prompt: str, default: bool = True) -> bool:
 
 def main():
     parser = argparse.ArgumentParser(description="Generate REGISTRY.json for OPL Tier 1 adopters")
+    parser.add_argument("--version", action="version", version="OPL Adoption Tools 1.2.0")
     parser.add_argument("--output", "-o", default="REGISTRY.json",
                         help="Output file (default: REGISTRY.json)")
     parser.add_argument("--non-interactive", action="store_true",

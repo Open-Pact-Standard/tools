@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: OPL-1.3.1
 """OPL Compliance Checker
 
 Validates that a repository is correctly configured for OPL v1.3.1.
@@ -136,6 +137,7 @@ def check_opl_ai(root: Path) -> CheckResult:
 def main():
     parser = argparse.ArgumentParser(
         description="Check OPL v1.3.1 compliance for a repository")
+    parser.add_argument("--version", action="version", version="OPL Adoption Tools 1.2.0")
     parser.add_argument("directory", nargs="?", default=".",
                         help="Repository root (default: .)")
     parser.add_argument("--json", action="store_true",

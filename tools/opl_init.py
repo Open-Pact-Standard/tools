@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: OPL-1.3.1
 """OPL NOTICE File Generator — Interactive CLI that creates a valid NOTICE file for Open-Pact License v1.3.1."""
 import argparse, os, re, sys, urllib.request, urllib.error
 
@@ -83,6 +84,7 @@ def interactive_mode():
 
 def main():
     parser = argparse.ArgumentParser(description="Generate an OPL-1.3.1 NOTICE file.")
+    parser.add_argument("--version", action="version", version="OPL Adoption Tools 1.2.0")
     parser.add_argument("--non-interactive", action="store_true", help="Use CLI args instead of interactive prompts.")
     parser.add_argument("--output", default="NOTICE", help="Output file path (default: NOTICE).")
     parser.add_argument("--maintainer", help="Maintainer name and contact.")

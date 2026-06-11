@@ -156,6 +156,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Add SPDX-License-Identifier: OPL-1.3.1 headers to source files"
     )
+    parser.add_argument("--version", action="version", version="OPL Adoption Tools 1.2.0")
     parser.add_argument("directory", nargs="?", default=".",
                         help="Root directory to scan (default: .)")
     parser.add_argument("--dry-run", action="store_true",

@@ -129,6 +129,7 @@ def generate_migration_report(root: Path, old_license: str, files_to_update: lis
 
 def main():
     parser = argparse.ArgumentParser(description="Migrate a project to OPL-1.3.1")
+    parser.add_argument("--version", action="version", version="OPL Adoption Tools 1.2.0")
     parser.add_argument("directory", nargs="?", default=".",
                         help="Repository root (default: .)")
     parser.add_argument("--from", dest="old_license",
