@@ -1,0 +1,20 @@
+codecov:
+  require_ci_to_pass: true
+
+coverage:
+  status:
+    project:
+      default:
+        target: 30%
+        threshold: 5%
+    patch:
+      default:
+        target: 50%
+        threshold: 5%
+
+ignore:
+  - "tests/**"
+  - "canary_embedder.py"
+  - "cicd_pipeline.py"
+  - "js_embedder.py"
+  - "standard-terms.html"
