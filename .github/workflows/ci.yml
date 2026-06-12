@@ -81,6 +81,7 @@ jobs:
           python -m py_compile tools/opl_registry_gen.py
           python -m py_compile tools/opl_migrate.py
           python -m py_compile tools/opl_x402.py
+          python -m py_compile scripts/check_version.py
 
 
       - name: Verify version consistency
