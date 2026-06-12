@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: OPL-1.3.1 [ref:canary_3bb3d5e56516]
+# SPDX-License-Identifier: OPL-1.3.1 [ref:canary_3bb3d5e56516] [ref:canary_56096d94ec91]
 """
 OPL-1.1 Canary Token Embedding Tool (Clean Version)
 """
@@ -39,7 +39,7 @@ class CanaryManifest:
     distribution_id: str
     salt: str
     file_hash: str = ""
-    canary_tokens: List[CanaryToken] = field(default_factory=list)
+    canary_tokens: list[dict] = field(default_factory=list)
     merkle_root: str = ""
 
 class TokenGenerator:

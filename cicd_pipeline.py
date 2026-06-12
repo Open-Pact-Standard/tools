@@ -72,7 +72,6 @@ class CanaryCIPipeline:
             
             # Save manifest
             manifest_path = Path(self.config.get('manifest_output', 'canary_manifest.json'))
-            manifest_str = manifest.distribution_id
             manifest_dict = {
                 'project_id': manifest.project_id,
                 'distribution_id': manifest.distribution_id,
