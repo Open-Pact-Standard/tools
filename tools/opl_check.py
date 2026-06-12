@@ -134,14 +134,8 @@ def check_opl_ai(root: Path) -> CheckResult:
     return CheckResult("opl-ai", False, "Cannot check OPL-AI: no NOTICE file", "info")
 
 
-# Single source of truth for version: read from __init__.py
-from pathlib import Path
-try:
-    _ns = {}
-    exec((Path(__file__).resolve().parent / "__init__.py").read_text(), _ns)
-    __version__ = _ns["__version__"]
-except FileNotFoundError:
-    raise SystemExit("ERROR: tools/__init__.py not found — cannot determine version")
+# Single source of truth for version: read from _version.py
+from _version import __version__  # noqa: E402
 
 def main():
     parser = argparse.ArgumentParser(

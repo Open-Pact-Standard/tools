@@ -1,3 +1,3 @@
 # SPDX-License-Identifier: OPL-1.3.1
 # OPL Adoption Tools
-__version__ = "1.2.0"
+from _version import __version__  # noqa: F401

@@ -84,14 +84,8 @@ def interactive_mode():
     args.trademark = ask("Trademark notice (optional, press Enter to skip)", default="") or None
     return args
 
-# Single source of truth for version: read from __init__.py
-from pathlib import Path
-try:
-    _ns = {}
-    exec((Path(__file__).resolve().parent / "__init__.py").read_text(), _ns)
-    __version__ = _ns["__version__"]
-except FileNotFoundError:
-    raise SystemExit("ERROR: tools/__init__.py not found — cannot determine version")
+# Single source of truth for version: read from _version.py
+from _version import __version__  # noqa: E402
 
 def main():
     parser = argparse.ArgumentParser(description="Generate an OPL-1.3.1 NOTICE file.")

@@ -184,11 +184,11 @@ class TestVersionConsistency:
         assert len(tools_ok) == 6, f"Expected 6 tools, found {len(tools_ok)}: {tools_ok}"
 
     def test_init_version_is_defined(self):
-        """__init__.py should define __version__."""
+        """_version.py should define __version__."""
         import re as r
-        init_path = Path(TOOLS_DIR).parent / "tools" / "__init__.py"
-        with open(init_path) as f:
-            init_content = f.read()
-        m = r.search(r'__version__ = "([^"]+)"' , init_content)
-        assert m, "No __version__ in __init__.py"
+        version_path = Path(TOOLS_DIR).parent / "tools" / "_version.py"
+        with open(version_path) as f:
+            vtext = f.read()
+        m = r.search(r'__version__ = "([^"]+)"' , vtext)
+        assert m, "No __version__ in _version.py"
         assert len(m.group(1).split('.')) == 3, "Version should be semver (X.Y.Z)"

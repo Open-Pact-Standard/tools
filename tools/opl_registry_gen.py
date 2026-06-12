@@ -63,14 +63,8 @@ def ask_yes_no(prompt: str, default: bool = True) -> bool:
         print("    Please enter y or n.")
 
 
-# Single source of truth for version: read from __init__.py
-from pathlib import Path
-try:
-    _ns = {}
-    exec((Path(__file__).resolve().parent / "__init__.py").read_text(), _ns)
-    __version__ = _ns["__version__"]
-except FileNotFoundError:
-    raise SystemExit("ERROR: tools/__init__.py not found — cannot determine version")
+# Single source of truth for version: read from _version.py
+from _version import __version__  # noqa: E402
 
 def main():
     parser = argparse.ArgumentParser(description="Generate REGISTRY.json for OPL Tier 1 adopters")
