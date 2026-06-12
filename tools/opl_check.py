@@ -104,7 +104,7 @@ def check_standard_terms_url(root: Path) -> CheckResult:
                            f"URL check failed ({e}): {url}", "warning")
 
 
-def check_spdx_headers(root: Path, exclude_patterns: list) -> CheckResult:
+def check_spdx_headers(root: Path, exclude_patterns: list[str]) -> CheckResult:
     if collect_files is None:
         return CheckResult("spdx-headers", False,
                            "Cannot import opl_spdx_inject module", "warning")
@@ -137,7 +137,7 @@ def check_opl_ai(root: Path) -> CheckResult:
 # Single source of truth for version: read from _version.py
 from _version import __version__  # noqa: E402
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Check OPL v1.3.1 compliance for a repository")
     parser.add_argument("--version", action="version", version=f"OPL Adoption Tools {__version__}")

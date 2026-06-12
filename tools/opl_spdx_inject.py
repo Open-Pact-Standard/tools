@@ -155,7 +155,7 @@ def collect_files(root: Path, exclude_patterns: list[str]) -> list[Path]:
 # Single source of truth for version: read from _version.py
 from _version import __version__  # noqa: E402
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Add SPDX-License-Identifier: OPL-1.3.1 headers to source files"
     )

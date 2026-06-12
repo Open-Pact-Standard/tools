@@ -66,7 +66,7 @@ def ask_yes_no(prompt: str, default: bool = True) -> bool:
 # Single source of truth for version: read from _version.py
 from _version import __version__  # noqa: E402
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Generate REGISTRY.json for OPL Tier 1 adopters")
     parser.add_argument("--version", action="version", version=f"OPL Adoption Tools {__version__}")
     parser.add_argument("--output", "-o", default="REGISTRY.json",
