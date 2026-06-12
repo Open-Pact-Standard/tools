@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: OPL-1.3.1
 """OPL NOTICE File Generator — Interactive CLI that creates a valid NOTICE file for Open-Pact License v1.3.1."""
 import argparse, os, re, sys, urllib.request, urllib.error
+import re
+from pathlib import Path
 
 VALID_JURISDICTIONS = ["California, United States", "Delaware, United States", "New York, United States", "England and Wales", "Ontario, Canada", "Berlin, Germany", "New South Wales, Australia", "Singapore", "Dublin, Ireland"]
 
@@ -83,13 +85,11 @@ def interactive_mode():
     return args
 
 # Single source of truth for version: read from __init__.py
-import re as _version_re
-from pathlib import Path as _version_Path
 try:
-    _version_file = (_version_Path(__file__).resolve().parent / "__init__.py").read_text()
+    _version_file = (Path(__file__).resolve().parent / "__init__.py").read_text()
 except FileNotFoundError:
     raise SystemExit("ERROR: tools/__init__.py not found — cannot determine version")
-_version_match = _version_re.search(r"__version__\s*=\s*\"([^\"]+)\"", _version_file)
+_version_match = re.search(r"__version__\s*=\s*\"([^\"]+)\"", _version_file)
 if _version_match:
     __version__ = _version_match.group(1)
 else:

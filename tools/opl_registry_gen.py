@@ -11,6 +11,8 @@ import argparse
 import json
 import sys
 from datetime import datetime, timezone
+import re
+from pathlib import Path
 
 
 BANNER = """
@@ -62,13 +64,11 @@ def ask_yes_no(prompt: str, default: bool = True) -> bool:
 
 
 # Single source of truth for version: read from __init__.py
-import re as _version_re
-from pathlib import Path as _version_Path
 try:
-    _version_file = (_version_Path(__file__).resolve().parent / "__init__.py").read_text()
+    _version_file = (Path(__file__).resolve().parent / "__init__.py").read_text()
 except FileNotFoundError:
     raise SystemExit("ERROR: tools/__init__.py not found — cannot determine version")
-_version_match = _version_re.search(r"__version__\s*=\s*\"([^\"]+)\"", _version_file)
+_version_match = re.search(r"__version__\s*=\s*\"([^\"]+)\"", _version_file)
 if _version_match:
     __version__ = _version_match.group(1)
 else:
