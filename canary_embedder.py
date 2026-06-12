@@ -25,6 +25,7 @@ EXCLUDED_DIRS = frozenset({
     'test', 'tests', '__test__', '__tests__', '__pycache__',
     'node_modules', '.git', 'venv', '.venv', '.env',
     'build', 'dist', 'target', '.tox', '.nox', '.eggs',
+    'tools',
 })
 
 @dataclass
@@ -129,7 +130,8 @@ class VariableInjectionEmbedder:
         self.files_modified.append(relative)
         return relative
 
-    def _is_excluded(self, path: Path) -> bool:
+    @staticmethod
+    def _is_excluded(path: Path) -> bool:
         parts = set(p.lower() for p in path.parts)
         return bool(parts & EXCLUDED_DIRS)
 
@@ -191,7 +193,8 @@ class WatermarkEmbedder:
                 return relative
         return None
 
-    def _is_excluded(self, path: Path) -> bool:
+    @staticmethod
+    def _is_excluded(path: Path) -> bool:
         parts = set(p.lower() for p in path.parts)
         return bool(parts & EXCLUDED_DIRS)
 
@@ -236,7 +239,8 @@ class DeadCodeEmbedder:
         self.files_modified.append(relative)
         return relative
 
-    def _is_excluded(self, path: Path) -> bool:
+    @staticmethod
+    def _is_excluded(path: Path) -> bool:
         parts = set(p.lower() for p in path.parts)
         return bool(parts & EXCLUDED_DIRS)
 
