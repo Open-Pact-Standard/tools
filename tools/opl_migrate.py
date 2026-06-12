@@ -129,15 +129,12 @@ def generate_migration_report(root: Path, old_license: str, files_to_update: lis
 
 # Single source of truth for version: read from __init__.py
 try:
-    version_file = (Path(__file__).resolve().parent / "__init__.py").read_text()
+    from pathlib import Path
+    _ns = {}
+    exec((Path(__file__).resolve().parent / "__init__.py").read_text(), _ns)
+    __version__ = _ns["__version__"]
 except FileNotFoundError:
     raise SystemExit("ERROR: tools/__init__.py not found — cannot determine version")
-version_match = re.search(r"__version__\s*=\s*\"([^\"]+)\"", version_file)
-if version_match:
-    __version__ = version_match.group(1)
-else:
-    raise SystemExit("ERROR: Could not read __version__ from tools/__init__.py")
-
 
 def main():
     parser = argparse.ArgumentParser(description="Migrate a project to OPL-1.3.1")
