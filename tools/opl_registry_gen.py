@@ -65,12 +65,12 @@ def ask_yes_no(prompt: str, default: bool = True) -> bool:
 
 # Single source of truth for version: read from __init__.py
 try:
-    _version_file = (Path(__file__).resolve().parent / "__init__.py").read_text()
+    version_file = (Path(__file__).resolve().parent / "__init__.py").read_text()
 except FileNotFoundError:
     raise SystemExit("ERROR: tools/__init__.py not found — cannot determine version")
-_version_match = re.search(r"__version__\s*=\s*\"([^\"]+)\"", _version_file)
-if _version_match:
-    __version__ = _version_match.group(1)
+version_match = re.search(r"__version__\s*=\s*\"([^\"]+)\"", version_file)
+if version_match:
+    __version__ = version_match.group(1)
 else:
     raise SystemExit("ERROR: Could not read __version__ from tools/__init__.py")
 
