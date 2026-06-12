@@ -105,11 +105,11 @@ class CanaryCIPipeline:
         
         for ext in ['.py', '.js', '.ts', '.rs', '.go', '.sol', '.c', '.cpp', '.java']:
             files = list(self.source_dir.rglob(f'*{ext}'))
-            count = len([f for f in files if not str(f).contains('test') and not str(f).contains('__pycache__')])
+            count = len([f for f in files if 'test' not in str(f) and '__pycache__' not in str(f)])
             if count > 0:
                 extensions[ext] = count
                 stats['total_files'] += count
-                stats['languages'].append(ext[1:])  # Remove the dot
+                stats['languages'].add(ext[1:])  # Remove the dot
                 stats['total_size'] += sum(f.stat().st_size for f in files[:100])
         
         return stats
