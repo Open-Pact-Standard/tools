@@ -162,39 +162,33 @@ class TestCLIUtilities:
         assert run_x402().returncode == 1
 
 class TestVersionConsistency:
-    """Verify that all tools report the same version."""
+    """Verify that all tools use __version__ (single source of truth)."""
 
     def test_all_tools_same_version(self):
-        """All tools should report the same version string."""
+        """All tools should use __version__ f-string, not hardcoded versions."""
         import glob as g
         import re as r
-        versions = {}
-        for fp in sorted(g.glob(str(Path(TOOLS_DIR).parent / "tools" / "opl_*.py"))):
-            with open(fp) as f:
-                for line in f:
-                    m = r.search(r'version="OPL Adoption Tools ([^"]+)"', line)
-                    if m:
-                        versions[Path(fp).name] = m.group(1)
-                        break
-        assert len(versions) == 6, f"Expected 6 tools with version, got {len(versions)}: {list(versions.keys())}"
-        unique = set(versions.values())
-        assert len(unique) == 1, f"Version mismatch: {versions}"
+        tools_dir = Path(TOOLS_DIR)
+        tools_ok = []
+        for fp in sorted(tools_dir.glob("opl_*.py")):
+            text = fp.read_text()
+            has_fstring = bool(
+                r.search(r'version=f"OPL Adoption Tools \{__version__\}' , text)
+            )
+            has_hardcoded = bool(
+                r.search(r'version="OPL Adoption Tools [0-9]+\.[0-9]+' , text)
+            )
+            assert has_fstring, f"{fp.name}: should use __version__ f-string"
+            assert not has_hardcoded, f"{fp.name}: still has hardcoded version"
+            tools_ok.append(fp.name)
+        assert len(tools_ok) == 6, f"Expected 6 tools, found {len(tools_ok)}: {tools_ok}"
 
-    def test_init_version_matches(self):
-        """__init__.py version should match tool versions."""
+    def test_init_version_is_defined(self):
+        """__init__.py should define __version__."""
         import re as r
         init_path = Path(TOOLS_DIR).parent / "tools" / "__init__.py"
         with open(init_path) as f:
-            content = f.read()
-        m = r.search(r'__version__ = "([^"]+)"', content)
+            init_content = f.read()
+        m = r.search(r'__version__ = "([^"]+)"' , init_content)
         assert m, "No __version__ in __init__.py"
-        init_version = m.group(1)
-        # Check one tool
-        tool_path = Path(TOOLS_DIR) / "opl_x402.py"
-        with open(tool_path) as f:
-            for line in f:
-                m2 = r.search(r'version="OPL Adoption Tools ([^"]+)"', line)
-                if m2:
-                    assert m2.group(1) == init_version,                         f"__init__.py has {init_version}, tools have {m2.group(1)}"
-                    break
-
+        assert len(m.group(1).split('.')) == 3, "Version should be semver (X.Y.Z)"

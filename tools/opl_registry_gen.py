@@ -61,9 +61,20 @@ def ask_yes_no(prompt: str, default: bool = True) -> bool:
         print("    Please enter y or n.")
 
 
+# Single source of truth for version: read from __init__.py
+import re as _version_re
+from pathlib import Path as _version_Path
+_version_file = (_version_Path(__file__).resolve().parent / "__init__.py").read_text()
+_version_match = _version_re.search(r"__version__\s*=\s*\"([^\"]+)\"", _version_file)
+if _version_match:
+    __version__ = _version_match.group(1)
+else:
+    raise SystemExit("ERROR: Could not read __version__ from tools/__init__.py")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Generate REGISTRY.json for OPL Tier 1 adopters")
-    parser.add_argument("--version", action="version", version="OPL Adoption Tools 1.2.0")
+    parser.add_argument("--version", action="version", version=f"OPL Adoption Tools {__version__}")
     parser.add_argument("--output", "-o", default="REGISTRY.json",
                         help="Output file (default: REGISTRY.json)")
     parser.add_argument("--non-interactive", action="store_true",

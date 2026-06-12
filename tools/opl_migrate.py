@@ -127,9 +127,20 @@ def generate_migration_report(root: Path, old_license: str, files_to_update: lis
     return report
 
 
+# Single source of truth for version: read from __init__.py
+import re as _version_re
+from pathlib import Path as _version_Path
+_version_file = (_version_Path(__file__).resolve().parent / "__init__.py").read_text()
+_version_match = _version_re.search(r"__version__\s*=\s*\"([^\"]+)\"", _version_file)
+if _version_match:
+    __version__ = _version_match.group(1)
+else:
+    raise SystemExit("ERROR: Could not read __version__ from tools/__init__.py")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Migrate a project to OPL-1.3.1")
-    parser.add_argument("--version", action="version", version="OPL Adoption Tools 1.2.0")
+    parser.add_argument("--version", action="version", version=f"OPL Adoption Tools {__version__}")
     parser.add_argument("directory", nargs="?", default=".",
                         help="Repository root (default: .)")
     parser.add_argument("--from", dest="old_license",
