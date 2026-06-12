@@ -8,6 +8,12 @@ import hashlib
 from pathlib import Path
 from typing import List, Optional
 
+EXCLUDED_DIRS = frozenset({
+    'test', 'tests', '__test__', '__tests__', '__pycache__',
+    'node_modules', '.git', 'venv', '.venv', '.env',
+    'build', 'dist', 'target', '.tox', '.nox', '.eggs',
+})
+
 class JSEmbedder:
     """JavaScript-optimized canary embedding using AST-friendly patterns."""
     
@@ -59,5 +65,4 @@ class JSEmbedder:
     
     def _is_excluded(self, path: Path) -> bool:
         parts = set(p.lower() for p in path.parts)
-        excluded = {'test', 'tests', '__test__', '__tests__', 'node_modules', '.git', 'dist', 'build', 'target'}
-        return bool(parts & excluded)
+        return bool(parts & EXCLUDED_DIRS)
