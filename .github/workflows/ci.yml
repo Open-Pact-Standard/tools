@@ -84,27 +84,7 @@ jobs:
 
 
       - name: Verify version consistency
-        run: |
-          python -c '
-import glob, re
-versions = set()
-for fp in sorted(glob.glob("tools/opl_*.py")):
-    with open(fp) as f:
-        for line in f:
-            m = re.search(r"version=\"OPL Adoption Tools ([^\"]+)\"", line)
-            if m:
-                versions.add(m.group(1))
-                break
-with open("tools/__init__.py") as f:
-    for line in f:
-        m = re.search(r"__version__ = \"([^\"]+)\"", line)
-        if m:
-            versions.add(m.group(1))
-            break
-if len(versions) != 1:
-    print(f"ERROR: Version mismatch across files: {versions}")
-    raise SystemExit(1)
-print(f"Version consistent: {versions.pop()}")
+        run: python scripts/check_version.py
 
       - name: Verify SPDX headers
         run: python tools/opl_spdx_inject.py tools/ --check
