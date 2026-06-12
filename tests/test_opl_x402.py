@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: OPL-1.3.1
 """Tests for opl_x402.py - x402 Payment Generator"""
 from __future__ import annotations
 
@@ -159,3 +160,41 @@ class TestCLIUtilities:
 
     def test_no_args(self):
         assert run_x402().returncode == 1
+
+class TestVersionConsistency:
+    """Verify that all tools report the same version."""
+
+    def test_all_tools_same_version(self):
+        """All tools should report the same version string."""
+        import glob as g
+        import re as r
+        versions = {}
+        for fp in sorted(g.glob(str(TOOLS.parent / "tools" / "opl_*.py"))):
+            with open(fp) as f:
+                for line in f:
+                    m = r.search(r'version="OPL Adoption Tools ([^"]+)"', line)
+                    if m:
+                        versions[Path(fp).name] = m.group(1)
+                        break
+        assert len(versions) == 6, f"Expected 6 tools with version, got {len(versions)}: {list(versions.keys())}"
+        unique = set(versions.values())
+        assert len(unique) == 1, f"Version mismatch: {versions}"
+
+    def test_init_version_matches(self):
+        """__init__.py version should match tool versions."""
+        import re as r
+        init_path = TOOLS.parent / "tools" / "__init__.py"
+        with open(init_path) as f:
+            content = f.read()
+        m = r.search(r'__version__ = "([^"]+)"', content)
+        assert m, "No __version__ in __init__.py"
+        init_version = m.group(1)
+        # Check one tool
+        tool_path = TOOLS / "opl_x402.py"
+        with open(tool_path) as f:
+            for line in f:
+                m2 = r.search(r'version="OPL Adoption Tools ([^"]+)"', line)
+                if m2:
+                    assert m2.group(1) == init_version,                         f"__init__.py has {init_version}, tools have {m2.group(1)}"
+                    break
+
