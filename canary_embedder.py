@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: OPL-1.3.1
+# SPDX-License-Identifier: OPL-1.3.1 [ref:canary_3bb3d5e56516]
 """
 OPL-1.1 Canary Token Embedding Tool (Clean Version)
 """
@@ -125,7 +125,7 @@ class VariableInjectionEmbedder:
 
     def _is_excluded(self, path: Path) -> bool:
         parts = set(p.lower() for p in path.parts)
-        excluded = {'test', 'tests', '__pycache__', 'node_modules', '.git', 'venv', 'build', 'dist', 'target'}
+        excluded = {'test', 'tests', '__pycache__', 'node_modules', '.git', 'venv', '.venv', '.env', 'build', 'dist', 'target', '.tox', '.nox', '.eggs'}
         return bool(parts & excluded)
 
     def _find_insertion_point(self, lines: List[str], suffix: str) -> int:
@@ -188,7 +188,7 @@ class WatermarkEmbedder:
 
     def _is_excluded(self, path: Path) -> bool:
         parts = set(p.lower() for p in path.parts)
-        excluded = {'test', 'tests', '__pycache__', 'node_modules', '.git', 'venv', 'build', 'dist', 'target'}
+        excluded = {'test', 'tests', '__pycache__', 'node_modules', '.git', 'venv', '.venv', '.env', 'build', 'dist', 'target', '.tox', '.nox', '.eggs'}
         return bool(parts & excluded)
 
 class DeadCodeEmbedder:
@@ -234,7 +234,7 @@ class DeadCodeEmbedder:
 
     def _is_excluded(self, path: Path) -> bool:
         parts = set(p.lower() for p in path.parts)
-        excluded = {'test', 'tests', '__pycache__', 'node_modules', '.git', 'venv', 'build', 'dist', 'target'}
+        excluded = {'test', 'tests', '__pycache__', 'node_modules', '.git', 'venv', '.venv', '.env', 'build', 'dist', 'target', '.tox', '.nox', '.eggs'}
         return bool(parts & excluded)
 
 class CanaryEmbedder:

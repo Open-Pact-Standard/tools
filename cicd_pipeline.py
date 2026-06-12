@@ -16,8 +16,11 @@ from typing import Any, Dict, List, Optional
 class CanaryCIPipeline:
     """Automated CI/CD pipeline for OPL-1.1 canary embedding and registration."""
     
-    def __init__(self, config_path: Optional[str] = None) -> None:
-        self.config = self._load_config(config_path)
+    def __init__(self, config_path: Optional[str] = None, config: Optional[Dict[str, Any]] = None) -> None:
+        if config is not None:
+            self.config = config
+        else:
+            self.config = self._load_config(config_path)
         self.source_dir = Path(self.config.get('source_dir', '.'))
         self.project_id = self.config.get('project_id')
         self.registry_address = self.config.get('registry_address')
@@ -158,7 +161,7 @@ def main() -> None:
     if args.output: config['manifest_output'] = args.output
     if args.salt: config['distribution_salt'] = args.salt
     
-    pipeline = CanaryCIPipeline(config)
+    pipeline = CanaryCIPipeline(config=config)
     result = pipeline.run_pipeline(dry_run=args.dry_run)
     
     if result:
