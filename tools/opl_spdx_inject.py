@@ -153,8 +153,8 @@ def collect_files(root: Path, exclude_patterns: list[str]) -> list[Path]:
 
 
 # Single source of truth for version: read from __init__.py
+from pathlib import Path
 try:
-    from pathlib import Path
     _ns = {}
     exec((Path(__file__).resolve().parent / "__init__.py").read_text(), _ns)
     __version__ = _ns["__version__"]

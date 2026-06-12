@@ -85,8 +85,8 @@ def interactive_mode():
     return args
 
 # Single source of truth for version: read from __init__.py
+from pathlib import Path
 try:
-    from pathlib import Path
     _ns = {}
     exec((Path(__file__).resolve().parent / "__init__.py").read_text(), _ns)
     __version__ = _ns["__version__"]
