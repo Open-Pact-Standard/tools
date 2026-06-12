@@ -3,7 +3,7 @@
 """OPL Compliance Checker
 
 Validates that a repository is correctly configured for OPL v1.3.1.
-Usage: python3 opl_check.py [directory] [--json] [--strict] [--skip-remote]
+Usage: python3 opl_check.py [directory] [--json] [--strict] [--skip-remote] [--check]
 """
 from __future__ import annotations
 
@@ -151,12 +151,18 @@ def main() -> None:
                         help="Skip URL reachability check")
     parser.add_argument("--exclude", action="append", default=[],
                         help="Exclude pattern for SPDX check")
+    parser.add_argument("--check", action="store_true",
+                        help="CI mode: exit non-zero on any failure, output JSON")
     args = parser.parse_args()
 
     root = Path(args.directory).resolve()
     if not root.is_dir():
         print(f"Error: {root} is not a directory", file=sys.stderr)
         sys.exit(1)
+
+    # --check implies --json for machine-readable CI output
+    if args.check:
+        args.json = True
 
     results = [
         check_license(root),
