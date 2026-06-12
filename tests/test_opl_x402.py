@@ -169,7 +169,7 @@ class TestVersionConsistency:
         import glob as g
         import re as r
         versions = {}
-        for fp in sorted(g.glob(str(TOOLS.parent / "tools" / "opl_*.py"))):
+        for fp in sorted(g.glob(str(Path(TOOLS_DIR).parent / "tools" / "opl_*.py"))):
             with open(fp) as f:
                 for line in f:
                     m = r.search(r'version="OPL Adoption Tools ([^"]+)"', line)
@@ -183,14 +183,14 @@ class TestVersionConsistency:
     def test_init_version_matches(self):
         """__init__.py version should match tool versions."""
         import re as r
-        init_path = TOOLS.parent / "tools" / "__init__.py"
+        init_path = Path(TOOLS_DIR).parent / "tools" / "__init__.py"
         with open(init_path) as f:
             content = f.read()
         m = r.search(r'__version__ = "([^"]+)"', content)
         assert m, "No __version__ in __init__.py"
         init_version = m.group(1)
         # Check one tool
-        tool_path = TOOLS / "opl_x402.py"
+        tool_path = Path(TOOLS_DIR) / "opl_x402.py"
         with open(tool_path) as f:
             for line in f:
                 m2 = r.search(r'version="OPL Adoption Tools ([^"]+)"', line)
