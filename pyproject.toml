@@ -26,6 +26,10 @@ classifiers = [
     "Topic :: Software Development :: Quality Assurance",
 ]
 
+dependencies = [
+    "packaging>=24.0",
+]
+
 [project.optional-dependencies]
 dev = [
     "pytest",
