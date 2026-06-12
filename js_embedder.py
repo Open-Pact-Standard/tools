@@ -65,6 +65,7 @@ class JSEmbedder:
         return relative
     
     @staticmethod
+    @staticmethod
     def _is_excluded(path: Path) -> bool:
         parts = set(p.lower() for p in path.parts)
         return bool(parts & EXCLUDED_DIRS)

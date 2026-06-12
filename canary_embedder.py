@@ -131,6 +131,7 @@ class VariableInjectionEmbedder:
         return relative
 
     @staticmethod
+    @staticmethod
     def _is_excluded(path: Path) -> bool:
         parts = set(p.lower() for p in path.parts)
         return bool(parts & EXCLUDED_DIRS)
@@ -194,6 +195,7 @@ class WatermarkEmbedder:
         return None
 
     @staticmethod
+    @staticmethod
     def _is_excluded(path: Path) -> bool:
         parts = set(p.lower() for p in path.parts)
         return bool(parts & EXCLUDED_DIRS)
@@ -239,6 +241,7 @@ class DeadCodeEmbedder:
         self.files_modified.append(relative)
         return relative
 
+    @staticmethod
     @staticmethod
     def _is_excluded(path: Path) -> bool:
         parts = set(p.lower() for p in path.parts)
