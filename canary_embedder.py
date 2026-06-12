@@ -39,7 +39,7 @@ class CanaryManifest:
     distribution_id: str
     salt: str
     file_hash: str = ""
-    canary_tokens: List[dict] = field(default_factory=list)
+    canary_tokens: List[CanaryToken] = field(default_factory=list)
     merkle_root: str = ""
 
 class TokenGenerator:
@@ -297,7 +297,7 @@ class CanaryEmbedder:
         return CanaryManifest(
             project_id=self.project_id, distribution_id=self.distribution_id,
             salt=self.salt, file_hash=tree_hash, 
-            canary_tokens=[asdict(t) for t in self.tokens], merkle_root=self.tree_root,
+            canary_tokens=list(self.tokens), merkle_root=self.tree_root,
         )
 
     def _hash_tree(self, source_dir: Path) -> str:
@@ -311,7 +311,7 @@ class CanaryEmbedder:
     def verify_source(self, source_dir: Path, manifest: CanaryManifest) -> List[Tuple[str, str]]:
         matches = []
         for token_data in manifest.canary_tokens:
-            secret = token_data['secret']
+            secret = token_data.secret
             for f in source_dir.rglob('*'):
                 if f.is_file() and f.suffix in SUPPORTED_EXTENSIONS:
                     try:
@@ -366,7 +366,7 @@ def cmd_embed(args: argparse.Namespace) -> None:
     manifest_dict = {
         'project_id': manifest.project_id, 'distribution_id': manifest.distribution_id,
         'file_hash': manifest.file_hash, 'merkle_root': manifest.merkle_root,
-        'canary_tokens': manifest.canary_tokens,
+        'canary_tokens': [asdict(t) for t in manifest.canary_tokens],
         '_steward_secret_salt': args.salt,
     }
     output.write_text(json.dumps(manifest_dict, indent=2))
@@ -437,7 +437,7 @@ def cmd_verify(args: argparse.Namespace) -> None:
     manifest_obj = {
         'project_id': manifest_data['project_id'], 'distribution_id': manifest_data['distribution_id'],
         'salt': salt, 'file_hash': manifest_data.get('file_hash', ''),
-        'canary_tokens': manifest_data['canary_tokens'], 'merkle_root': manifest_data['merkle_root'],
+        'canary_tokens': [CanaryToken(**t) for t in manifest_data['canary_tokens']], 'merkle_root': manifest_data['merkle_root'],
     }
     matches = embedder.verify_source(source_dir, CanaryManifest(**manifest_obj))
 

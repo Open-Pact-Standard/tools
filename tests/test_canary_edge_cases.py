@@ -335,7 +335,7 @@ class TestCanaryEmbedderEdgeCases:
         )
         manifest = CanaryManifest(
             project_id=1, distribution_id="abc", salt="secret",
-            canary_tokens=[{"secret": "canary_nonexistent"}],
+            canary_tokens=[CanaryToken(token_id=0, secret='canary_nonexistent', embedding_type='variable')],
         )
         matches = emb.verify_source(tmp_path, manifest)
         assert matches == []
@@ -350,7 +350,7 @@ class TestCanaryEmbedderEdgeCases:
         )
         manifest = CanaryManifest(
             project_id=1, distribution_id="abc", salt="secret",
-            canary_tokens=[{"secret": secret}],
+            canary_tokens=[CanaryToken(token_id=0, secret=secret, embedding_type='variable')],
         )
         matches = emb.verify_source(tmp_path, manifest)
         assert len(matches) == 1

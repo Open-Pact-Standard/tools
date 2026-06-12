@@ -10,6 +10,7 @@ import subprocess
 import sys
 import os
 from pathlib import Path
+from dataclasses import asdict
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -77,7 +78,7 @@ class CanaryCIPipeline:
                 'distribution_id': manifest.distribution_id,
                 'file_hash': manifest.file_hash,
                 'merkle_root': manifest.merkle_root,
-                'canary_tokens': manifest.canary_tokens,
+                'canary_tokens': [asdict(t) for t in manifest.canary_tokens],
                 '_steward_secret_salt': self.distribution_salt,
                 'created_at': datetime.utcnow().isoformat(),
                 'ci_pipeline_version': '1.0.0',
