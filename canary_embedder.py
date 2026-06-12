@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: OPL-1.3.1
 """
 OPL-1.1 Canary Token Embedding Tool (Clean Version)
 """
@@ -43,7 +44,7 @@ class CanaryManifest:
 
 class TokenGenerator:
     @staticmethod
-    def generate(project_id, distribution_id, index, salt):
+    def generate(project_id: int, distribution_id: str, index: int, salt: str) -> str:
         data = f"{CANARY_PREFIX}_{project_id}_{distribution_id}_{index}_{salt}"
         h = hashlib.sha3_256(data.encode()).hexdigest()[:12]
         return f"{CANARY_PREFIX}_{h}"
@@ -53,7 +54,7 @@ class MerkleTree:
     def hash(data: str) -> str:
         return hashlib.sha3_256(data.encode()).hexdigest()
 
-    def build(self, leaves: List[str]):
+    def build(self, leaves: List[str]) -> Tuple[str, List[List[str]]]:
         if not leaves:
             raise ValueError("At least one leaf required")
         hashed = [self.hash(leaf) for leaf in leaves]
@@ -74,7 +75,7 @@ class MerkleTree:
             level = next_level
         return level[0], tree
 
-    def get_proof(self, tree, leaf_index):
+    def get_proof(self, tree: List[List[str]], leaf_index: int) -> List[str]:
         proof = []
         index = leaf_index
         for level in range(len(tree) - 1):
@@ -96,10 +97,10 @@ class VariableInjectionEmbedder:
         '.java': 'private static final String {TOKEN} = "{TOKEN_VAL}"; // Internal',
     }
 
-    def __init__(self):
-        self.files_modified = []
+    def __init__(self) -> None:
+        self.files_modified: List[str] = []
 
-    def embed(self, source_dir, token, rng):
+    def embed(self, source_dir: Path, token: str, rng: random.Random) -> Optional[str]:
         files = []
         for ext in self.TEMPLATES:
             files.extend(source_dir.rglob(f'*{ext}'))
@@ -122,12 +123,12 @@ class VariableInjectionEmbedder:
         self.files_modified.append(relative)
         return relative
 
-    def _is_excluded(self, path):
+    def _is_excluded(self, path: Path) -> bool:
         parts = set(p.lower() for p in path.parts)
         excluded = {'test', 'tests', '__pycache__', 'node_modules', '.git', 'venv', 'build', 'dist', 'target'}
         return bool(parts & excluded)
 
-    def _find_insertion_point(self, lines, suffix):
+    def _find_insertion_point(self, lines: List[str], suffix: str) -> int:
         insert_at = 0
         in_imports = False
         for i, line in enumerate(lines):
@@ -151,10 +152,10 @@ class VariableInjectionEmbedder:
         return insert_at
 
 class WatermarkEmbedder:
-    def __init__(self):
-        self.files_modified = []
+    def __init__(self) -> None:
+        self.files_modified: List[str] = []
 
-    def embed(self, source_dir, token, rng):
+    def embed(self, source_dir: Path, token: str, rng: random.Random) -> Optional[str]:
         python_files = [f for f in source_dir.rglob('*.py')
                        if not self._is_excluded(f) and f.stat().st_size < 500_000]
         if not python_files:
@@ -185,16 +186,16 @@ class WatermarkEmbedder:
                 return relative
         return None
 
-    def _is_excluded(self, path):
+    def _is_excluded(self, path: Path) -> bool:
         parts = set(p.lower() for p in path.parts)
         excluded = {'test', 'tests', '__pycache__', 'node_modules', '.git', 'venv', 'build', 'dist', 'target'}
         return bool(parts & excluded)
 
 class DeadCodeEmbedder:
-    def __init__(self):
-        self.files_modified = []
+    def __init__(self) -> None:
+        self.files_modified: List[str] = []
 
-    def embed(self, source_dir, token, rng):
+    def embed(self, source_dir: Path, token: str, rng: random.Random) -> Optional[str]:
         python_files = [f for f in source_dir.rglob('*.py')
                        if not self._is_excluded(f) and f.stat().st_size < 500_000]
         if not python_files:
@@ -231,29 +232,29 @@ class DeadCodeEmbedder:
         self.files_modified.append(relative)
         return relative
 
-    def _is_excluded(self, path):
+    def _is_excluded(self, path: Path) -> bool:
         parts = set(p.lower() for p in path.parts)
         excluded = {'test', 'tests', '__pycache__', 'node_modules', '.git', 'venv', 'build', 'dist', 'target'}
         return bool(parts & excluded)
 
 class CanaryEmbedder:
-    def __init__(self, project_id, distribution_id, salt, strategies=None, num_canaries=10):
+    def __init__(self, project_id: int, distribution_id: str, salt: str, strategies: Optional[List[str]] = None, num_canaries: int = 10) -> None:
         self.project_id = project_id
         self.distribution_id = distribution_id
         self.salt = salt
         self.num_canaries = num_canaries
         self.strategies_str = strategies or ['variable', 'watermark']
-        self.tokens = []
+        self.tokens: List[CanaryToken] = []
         self.merkle_tree = MerkleTree()
         self.tree_root = ""
-        self.tree_levels = []
+        self.tree_levels: List[List[str]] = []
         self.strategy_map = {
             'variable': VariableInjectionEmbedder(),
             'deadcode': DeadCodeEmbedder(),
             'watermark': WatermarkEmbedder(),
         }
 
-    def generate_tokens(self):
+    def generate_tokens(self) -> None:
         self.tokens = []
         strategy_names = list(self.strategies_str)
         for i in range(self.num_canaries):
@@ -264,7 +265,7 @@ class CanaryEmbedder:
                 target_file="", line_number=-1, code_before="", code_after="",
             ))
 
-    def embed(self, source_dir):
+    def embed(self, source_dir: Path) -> List[CanaryToken]:
         rng = random.Random(f"{self.project_id}_{self.distribution_id}_{self.salt}".encode())
         for token in self.tokens:
             strategy = self.strategy_map.get(token.embedding_type)
@@ -279,7 +280,7 @@ class CanaryEmbedder:
                 print(f"  Failed to embed [{token.token_id}] (no suitable file)")
         return self.tokens
 
-    def build_merkle_tree(self):
+    def build_merkle_tree(self) -> str:
         leaves = []
         for token in self.tokens:
             leaf_data = f"{token.secret}_{self.project_id}_{self.distribution_id}_{token.token_id}"
@@ -291,7 +292,7 @@ class CanaryEmbedder:
             token.merkle_proof = self.merkle_tree.get_proof(self.tree_levels, i)
         return self.tree_root
 
-    def generate_manifest(self, source_dir):
+    def generate_manifest(self, source_dir: Path) -> CanaryManifest:
         tree_hash = self._hash_tree(source_dir)
         return CanaryManifest(
             project_id=self.project_id, distribution_id=self.distribution_id,
@@ -299,7 +300,7 @@ class CanaryEmbedder:
             canary_tokens=[asdict(t) for t in self.tokens], merkle_root=self.tree_root,
         )
 
-    def _hash_tree(self, source_dir):
+    def _hash_tree(self, source_dir: Path) -> str:
         h = hashlib.sha3_256()
         for f in sorted(source_dir.rglob('*')):
             if f.is_file() and f.suffix in SUPPORTED_EXTENSIONS:
@@ -307,7 +308,7 @@ class CanaryEmbedder:
                 h.update(f.read_bytes())
         return h.hexdigest()
 
-    def verify_source(self, source_dir, manifest):
+    def verify_source(self, source_dir: Path, manifest: CanaryManifest) -> List[Tuple[str, str]]:
         matches = []
         for token_data in manifest.canary_tokens:
             secret = token_data['secret']
@@ -322,7 +323,7 @@ class CanaryEmbedder:
                         pass
         return matches
 
-def cmd_embed(args):
+def cmd_embed(args: argparse.Namespace) -> None:
     source_dir = Path(args.source).resolve()
     if not source_dir.is_dir():
         print(f"Error: {source_dir} is not a directory", file=sys.stderr)
@@ -382,7 +383,7 @@ def cmd_embed(args):
     print(f"      issuedTo:     <licensee address>")
     print(f"    )\n")
 
-def cmd_build_merkle(args):
+def cmd_build_merkle(args: argparse.Namespace) -> None:
     manifest_path = Path(args.manifest)
     if not manifest_path.exists():
         print(f"Error: {manifest_path} not found", file=sys.stderr)
@@ -404,7 +405,7 @@ def cmd_build_merkle(args):
         print(f"  Leaf:   0x{token.get('merkle_leaf', leaves[i])}")
         print(f"  Proof:  {[f'0x{p}' for p in proof]}")
 
-def cmd_verify(args):
+def cmd_verify(args: argparse.Namespace) -> None:
     source_dir = Path(args.source).resolve()
     manifest_path = Path(args.manifest)
     if not source_dir.is_dir():
@@ -451,7 +452,7 @@ def cmd_verify(args):
         print("\nNo canary tokens found.")
     print()
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description='OPL-1.1 Canary Token Embedding Tool')
     subparsers = parser.add_subparsers(dest='command', help='Available commands')
 

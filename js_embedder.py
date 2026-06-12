@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: OPL-1.3.1
 """
 JavaScript/TypeScript Canary Embedding Strategies
 """
@@ -16,10 +17,10 @@ class JSEmbedder:
         'comment': '/* {TOKEN} */',
     }
     
-    def __init__(self):
-        self.files_modified = []
+    def __init__(self) -> None:
+        self.files_modified: List[str] = []
     
-    def embed(self, source_dir, token, rng):
+    def embed(self, source_dir: Path, token: str, rng: random.Random) -> Optional[str]:
         files = list(source_dir.rglob(f'*.ts') + list(source_dir.rglob(f'*.js')))
         files = [f for f in files if not self._is_excluded(f) and f.stat().st_size < 500000]
         
@@ -56,7 +57,7 @@ class JSEmbedder:
         self.files_modified.append(relative)
         return relative
     
-    def _is_excluded(self, path):
+    def _is_excluded(self, path: Path) -> bool:
         parts = set(p.lower() for p in path.parts)
         excluded = {'test', 'tests', '__test__', '__tests__', 'node_modules', '.git', 'dist', 'build', 'target'}
         return bool(parts & excluded)

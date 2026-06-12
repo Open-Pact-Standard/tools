@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: OPL-1.3.1
 """
 CI/CD Pipeline for OPL-1.1 Canary Token Embedding
 Automates: scan → embed → generate manifest → prepare on-chain registration data
@@ -10,11 +11,12 @@ import sys
 import os
 from pathlib import Path
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 class CanaryCIPipeline:
     """Automated CI/CD pipeline for OPL-1.1 canary embedding and registration."""
     
-    def __init__(self, config_path=None):
+    def __init__(self, config_path: Optional[str] = None) -> None:
         self.config = self._load_config(config_path)
         self.source_dir = Path(self.config.get('source_dir', '.'))
         self.project_id = self.config.get('project_id')
@@ -24,14 +26,14 @@ class CanaryCIPipeline:
         self.num_canaries = self.config.get('num_canaries', 12)
         self.strategies = self.config.get('strategies', ['variable', 'watermark', 'deadcode'])
         
-    def _load_config(self, config_path):
+    def _load_config(self, config_path: Optional[str]) -> Dict[str, Any]:
         """Load pipeline configuration."""
         if config_path and Path(config_path).exists():
             with open(config_path) as f:
                 return json.load(f)
         return {}
     
-    def run_pipeline(self, dry_run=False):
+    def run_pipeline(self, dry_run: bool = False) -> Optional[Dict[str, Any]]:
         """Execute the full pipeline: scan → embed → manifest → register."""
         print("\n" + "="*70)
         print("OPL-1.1 Canary CI/CD Pipeline")
@@ -96,7 +98,7 @@ class CanaryCIPipeline:
             print("\n  [DRY RUN] Skipping embed and registration")
             return None
     
-    def _scan_source(self):
+    def _scan_source(self) -> Dict[str, Any]:
         """Scan source tree and report statistics."""
         stats = {'total_files': 0, 'languages': set(), 'total_size': 0}
         extensions = {}
@@ -112,7 +114,7 @@ class CanaryCIPipeline:
         
         return stats
     
-    def _prepare_registration(self, merkle_root, manifest):
+    def _prepare_registration(self, merkle_root: str, manifest: Any) -> Dict[str, Any]:
         """Prepare on-chain registration data."""
         return {
             'method': 'registerCanaryDistribution',
@@ -128,7 +130,7 @@ class CanaryCIPipeline:
             'manifest_path': str(Path(self.config.get('manifest_output', 'canary_manifest.json')).resolve()),
         }
 
-def main():
+def main() -> None:
     import argparse
     
     parser = argparse.ArgumentParser(description='OPL-1.1 Canary CI/CD Pipeline')
