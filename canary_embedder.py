@@ -39,7 +39,7 @@ class CanaryManifest:
     distribution_id: str
     salt: str
     file_hash: str = ""
-    canary_tokens: List[CanaryToken] = field(default_factory=list)
+    canary_tokens: List[dict] = field(default_factory=list)
     merkle_root: str = ""
 
 class TokenGenerator:
