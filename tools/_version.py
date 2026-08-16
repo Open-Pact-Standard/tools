@@ -18,4 +18,4 @@ users. Keep this file to module-level __version__ (and any pure-Python
 imports of the standard library only).
 """
 
-__version__ = "1.2.0"
+__version__ = "1.3.1"

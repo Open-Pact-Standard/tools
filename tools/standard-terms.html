@@ -16,6 +16,7 @@ th{background:#f5f0e8;font-weight:600}
 code{background:#f5f0e8;padding:.15rem .4rem;border-radius:3px;font-size:.9rem}
 footer{margin-top:3rem;padding-top:1rem;border-top:1px solid #e8e0d0;font-size:.85rem;color:#666}
 
+.payment-box{background:#f5f0e8;border-left:3px solid #c8a951;padding:1rem 1.5rem;margin:1rem 0;font-size:.9rem}
 .x402-box{background:#f0f4ff;border:1px solid #c8d6e5;border-radius:8px;padding:1rem 1.5rem;margin:1rem 0;font-size:.9rem}
 .x402-box code{background:#e8edf5;padding:.15rem .4rem;border-radius:3px;font-size:.85rem}
 .badge-x402{display:inline-block;background:#2563eb;color:#fff;padding:.15rem .5rem;border-radius:4px;font-size:.75rem;font-weight:600;vertical-align:middle;margin-left:.5rem}
@@ -46,31 +47,33 @@ footer{margin-top:3rem;padding-top:1rem;border-top:1px solid #e8e0d0;font-size:.
 </table>
 <p>Annual subscriptions, paid in advance. Volume discounts available on request.</p>
 <h2>Payment Mechanism</h2>
-<div class="x402-box">
-<p><strong><span class="badge-x402">x402</span> Instant Crypto Payments</strong></p>
-<p>This project supports the <a href="https://x402.org">x402 protocol</a> for instant, account-free cryptocurrency payments. Pay with stablecoins (USDC, USDT, DAI, EURC) on multiple chains.</p>
+<div class="payment-box">
+<p><strong>Payment methods</strong> — choose one or more and fill in the blanks below. Stripe, bank wire, and contact email are the most common. x402 crypto payments are supported as an optional alternative.</p>
+
+<h2>Stripe (recommended for most projects)</h2>
+<p>Commercial users pay via Stripe at <a href="[STRIPE_LINK]">[STRIPE_LINK]</a>, or by bank wire on request.</p>
 <table>
-<tr><th>Network</th><th>Asset</th><th>Instructions</th></tr>
-<tr><td>Base</td><td>USDC</td><td>Use an x402-compatible wallet or agent.</td></tr>
-<tr><td>Ethereum</td><td>USDC / USDT</td><td>Same flow on mainnet. Higher gas fees.</td></tr>
-<tr><td>Solana</td><td>USDC</td><td>Use a Solana-compatible x402 client.</td></tr>
+<tr><th>Tier</th><th>Annual Fee</th></tr>
+<tr><td>Solo / indie (1 developer)</td><td>$[AMOUNT]/year</td></tr>
+<tr><td>Small team (2-10 developers)</td><td>$[AMOUNT]/year</td></tr>
+<tr><td>Organization (11+ developers)</td><td>$[AMOUNT]/year</td></tr>
+<tr><td>Enterprise / custom</td><td>Contact us</td></tr>
 </table>
+<p>Annual subscriptions, paid in advance. Volume discounts available on request.</p>
+
+<h2>Contact email (for negotiated or custom pricing)</h2>
+<p>If you don't see a tier that fits, or you need a custom arrangement, email <a href="mailto:[YOUR EMAIL]">[YOUR EMAIL]</a> with a description of your intended use. We respond within [N] days.</p>
+
+<details>
+<summary><strong>x402 crypto payments (optional)</strong></summary>
+<div class="x402-box">
+<p>This project optionally supports the <a href="https://x402.org">x402 protocol</a> for instant, account-free cryptocurrency payments via stablecoins (USDC, USDT, DAI, EURC) on Base, Ethereum, or Solana.</p>
 <p><strong>Recipient address:</strong> <code>[YOUR_WALLET_ADDRESS]</code></p>
-<p><strong>How it works:</strong></p>
-<ol>
-<li>Send the exact payment amount to the recipient address.</li>
-<li>Include the transaction signature in your <code>x-payment-signature</code> header.</li>
-<li>Access is verified automatically — no account required.</li>
-</ol>
-<p><strong>Payment amounts by tier:</strong></p>
-<ul>
-<li>Solo / indie: <strong>[AMOUNT] USDC/year</strong> on Base</li>
-<li>Small team: <strong>[AMOUNT] USDC/year</strong> on Base</li>
-<li>Organization: <strong>[AMOUNT] USDC/year</strong> on Base</li>
-<li>Enterprise: Contact maintainer</li>
-</ul>
-<p style="margin-top:.5rem;font-size:.85rem;color:#555">Also accepted: [Stripe / bank wire / GitHub Sponsors — add your preferred methods below]</p>
-<p>[CUSTOMIZE: Add any additional payment mechanisms as needed.]</p>
+<p><strong>How it works:</strong> Send the exact payment amount to the recipient address and include the transaction signature in your <code>x-payment-signature</code> header. Access is verified automatically — no account required.</p>
+<p>Payment amounts by tier: Solo/indie <strong>[AMOUNT] USDC/year</strong>, Small team <strong>[AMOUNT] USDC/year</strong>, Organization <strong>[AMOUNT] USDC/year</strong> on Base. Enterprise: contact maintainer.</p>
+<p style="margin-top:.5rem;font-size:.85rem;color:#555">Also accepted: Stripe, bank wire, GitHub Sponsors — add your preferred methods above.</p>
+</div>
+</details>
 </div>
 <h2>Scope of Permitted Commercial Use</h2>
 <p>Upon payment, the Commercial Use license permits:</p>

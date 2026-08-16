@@ -1,6 +1,17 @@
 # SPDX-License-Identifier: OPL-1.3.1
 """
-OPL-1.1 Canary Token Embedding Tool (Clean Version)
+OPL-1.3.1 Fingerprinting Tool — Canary Token Embedding + Release Fingerprinting
+
+Embeds unique, steganographic canary tokens into source code, builds a
+SHA3-256 Merkle tree from the canary secrets, and generates a distribution
+manifest. The Merkle root is published (e.g. in a GPG-signed Git tag) so that
+discovery of a canary in a suspect codebase is cryptographically verifiable.
+
+This is the enforcement backbone for the OPL-AI addendum (v1.3.1). It is
+optional — OPL-1.3.1 does not require fingerprinting. But if a Maintainer
+opts into OPL-AI and wants real, verifiable enforcement, this is the tool.
+
+Requires: Python 3.10+, stdlib only.
 """
 
 import argparse
@@ -361,21 +372,21 @@ def cmd_embed(args: argparse.Namespace) -> None:
         salt=args.salt, strategies=args.strategies.split(','), num_canaries=args.num_canaries,
     )
 
-    print(f"\n{'='*60}")
-    print(f"OPL-1.1 Canary Token Embedder")
-    print(f"{'='*60}")
-    print(f"  Source:      {source_dir}")
-    print(f"  Project ID:  {args.project_id}")
-    print(f"  Dist ID:     {distribution_id}")
-    print(f"  Salt:        {args.salt[:8]}{'*'*(len(args.salt)-8) if len(args.salt) > 8 else ''}")
-    print(f"  Strategies:  {args.strategies}")
-    print(f"  Num canaries: {args.num_canaries}\n")
+    print(f"""
+{'='*60}
+OPL-1.3.1 Fingerprinting — Distribution Manifest
+{'='*60}
+  Source:        {source_dir}
+  Project ID:    {args.project_id}
+  Distribution:  {distribution_id}
+  Salt:          {args.salt[:8]}{'*'*(len(args.salt)-8) if len(args.salt) > 8 else ''}
+  Strategies:    {args.strategies}
+  Canaries:      {args.num_canaries}
 
-    print("Step 1: Generating canary tokens...")
-    embedder.generate_tokens()
-    print(f"  Generated {len(embedder.tokens)} tokens\n")
+Step 1: Generating canary tokens...
+  Generated {len(embedder.tokens)} tokens
 
-    print("Step 2: Embedding tokens into source...")
+Step 2: Embedding tokens into source...""")
     embedder.embed(source_dir)
     print()
 
@@ -396,16 +407,27 @@ def cmd_embed(args: argparse.Namespace) -> None:
     output.write_text(json.dumps(manifest_dict, indent=2))
     print(f"  Manifest saved to: {output}")
 
-    print(f"\n{'='*60}")
-    print(f"Registration Data")
-    print(f"{'='*60}")
-    print(f"  Contract call:")
-    print(f"    royaltyRegistry.registerCanaryDistribution(")
-    print(f"      projectId:    {args.project_id},")
-    print(f"      distributionId: 0x{distribution_id},")
-    print(f"      merkleRoot:   0x{root},")
-    print(f"      issuedTo:     <licensee address>")
-    print(f"    )\n")
+    print(f"""
+Step 3: Building Merkle tree...
+  Merkle root: 0x{root}
+
+Step 4: Generating distribution manifest...
+  Manifest saved to: {output}
+
+Step 5: Release fingerprinting (run separately with --fingerprint)
+  To complete the fingerprint, run:
+    python3 canary_embedder.py fingerprint --source {source_dir} \\
+        --manifest {output} --output {output.parent / 'release_fingerprint.json'}
+
+Step 6: Publish for verification
+  Publish the Merkle root and release fingerprint in a verifiable form:
+    - GPG-sign a Git tag:  git tag -s v1.0 -m "Merkle: 0x{root}"
+    - Add the release fingerprint to the tag message or release notes.
+
+  The published Merkle root + fingerprint + GPG signature form the
+  verifiable record. Keep the canary secrets and full manifest offline
+  for litigation evidence assembly.
+""")
 
 def cmd_build_merkle(args: argparse.Namespace) -> None:
     manifest_path = Path(args.manifest)
@@ -449,13 +471,16 @@ def cmd_verify(args: argparse.Namespace) -> None:
     )
     embedder.tokens = [CanaryToken(**t) for t in manifest_data['canary_tokens']]
 
-    print(f"\n{'='*60}")
-    print(f"OPL-1.1 Canary Token Verification")
-    print(f"{'='*60}")
-    print(f"  Scanning:    {source_dir}")
-    print(f"  Manifest:    {manifest_path}")
-    print(f"  Canaries:    {len(embedder.tokens)}")
-    print(f"  Merkle root: 0x{manifest_data['merkle_root']}\n")
+    print(f"""
+Scanning for canary tokens...
+{'='*60}
+OPL-1.3.1 Fingerprinting — Verification
+{'='*60}
+  Scanning:      {source_dir}
+  Manifest:      {manifest_path}
+  Canaries:      {len(embedder.tokens)}
+  Merkle root:   0x{manifest_data['merkle_root']}
+""")
 
     print("Scanning for canary tokens...")
     manifest_obj = {
@@ -466,38 +491,65 @@ def cmd_verify(args: argparse.Namespace) -> None:
     matches = embedder.verify_source(source_dir, CanaryManifest(**manifest_obj))
 
     if matches:
-        print(f"\nFOUND {len(matches)} CANARY TOKEN MATCHES:")
-        for filepath, secret in matches:
-            print(f"  - {filepath}  (token: {secret[:30]}...)")
-        print(f"\nThis confirms the code was derived from the OPL distribution:")
-        print(f"  Distribution: 0x{manifest_data['distribution_id']}")
-        print(f"  Manifest merkle root: 0x{manifest_data['merkle_root']}")
+        print(f"""
+FOUND {len(matches)} CANARY TOKEN MATCHES:
+{chr(10).join(f'  - {filepath}  (token: {secret[:30]}...)' for filepath, secret in matches)}
+
+This confirms the code was derived from the OPL distribution:
+  Distribution:  {manifest_data['distribution_id']}
+  Merkle root:   0x{manifest_data['merkle_root']}
+
+To assemble a litigation evidence package, run:
+  python3 canary_embedder.py evidence --manifest {manifest_path} \\
+      --suspect-source {source_dir} --output evidence_package.json
+
+The evidence package includes: canary secrets, Merkle proofs, distribution
+metadata, and a human-readable summary suitable for legal use.
+""")
     else:
-        print("\nNo canary tokens found.")
+        print("\\nNo canary tokens found.\\n")
     print()
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description='OPL-1.1 Canary Token Embedding Tool')
+    parser = argparse.ArgumentParser(
+        description="OPL-1.3.1 Fingerprinting Tool — canary embedding, Merkle tree, "
+                    "release fingerprinting, and litigation evidence assembly. "
+                    "Optional enforcement backbone for the OPL-AI addendum. "
+                    "Stdlib-only, Python 3.10+.")
     subparsers = parser.add_subparsers(dest='command', help='Available commands')
 
-    embed_p = subparsers.add_parser('embed', help='Embed canary tokens into source code')
+    embed_p = subparsers.add_parser('embed', help='Embed canary tokens into source code and generate distribution manifest')
     embed_p.add_argument('--source', required=True, help='Source code directory')
-    embed_p.add_argument('--project-id', type=int, required=True, help='OPL project ID')
-    embed_p.add_argument('--distribution-id', required=True, help='Distribution identifier (hex)')
-    embed_p.add_argument('--salt', required=True, help='Secret salt for token generation')
-    embed_p.add_argument('--strategies', default='variable,watermark', help='Comma-separated strategies')
-    embed_p.add_argument('--num-canaries', type=int, default=10, help='Number of canary tokens')
-    embed_p.add_argument('--output', help='Output manifest path')
+    embed_p.add_argument('--project-id', type=int, required=True, help='OPL project ID (arbitrary integer you choose)')
+    embed_p.add_argument('--distribution-id', required=True, help='Distribution identifier (any unique string, e.g. release version or hex)')
+    embed_p.add_argument('--salt', required=True, help='Secret salt for token generation (keep offline)')
+    embed_p.add_argument('--strategies', default='variable,watermark,deadcode', help='Comma-separated embedding strategies: variable, watermark, deadcode')
+    embed_p.add_argument('--num-canaries', type=int, default=10, help='Number of canary tokens to embed')
+    embed_p.add_argument('--output', help='Output manifest path (default: canary_manifest.json)')
     embed_p.set_defaults(func=cmd_embed)
 
-    merkle_p = subparsers.add_parser('build-merkle', help='Build Merkle tree from manifest')
+    merkle_p = subparsers.add_parser('build-merkle', help='Build Merkle tree from an existing manifest')
     merkle_p.add_argument('--manifest', required=True, help='Path to canary manifest JSON')
     merkle_p.set_defaults(func=cmd_build_merkle)
 
-    verify_p = subparsers.add_parser('verify', help='Verify canaries in suspect codebase')
+    verify_p = subparsers.add_parser('verify', help='Verify canaries in a suspect codebase')
     verify_p.add_argument('--source', required=True, help='Source directory to scan')
     verify_p.add_argument('--manifest', required=True, help='Path to canary manifest JSON')
     verify_p.set_defaults(func=cmd_verify)
+
+    fp_p = subparsers.add_parser('fingerprint', help='Generate a release fingerprint for a distribution')
+    fp_p.add_argument('--source', required=True, help='Source directory or distribution archive path')
+    fp_p.add_argument('--manifest', required=True, help='Path to canary manifest JSON (to include merkle root)')
+    fp_p.add_argument('--output', required=True, help='Output release fingerprint JSON path')
+    fp_p.add_argument('--archive', action='store_true', help='Treat --source as a distribution archive (tar.gz/zip) to hash')
+    fp_p.set_defaults(func=cmd_fingerprint)
+
+    evidence_p = subparsers.add_parser('evidence', help='Assemble a litigation evidence package from a verification')
+    evidence_p.add_argument('--manifest', required=True, help='Path to canary manifest JSON')
+    evidence_p.add_argument('--suspect-source', required=True, help='Source directory where canaries were found')
+    evidence_p.add_argument('--output', required=True, help='Output evidence package JSON path')
+    evidence_p.add_argument('--matched-files', nargs='+', help='Specific files where canaries were matched (optional; if omitted, re-scans)')
+    evidence_p.set_defaults(func=cmd_evidence)
 
     args = parser.parse_args()
     if not args.command:

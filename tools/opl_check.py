@@ -67,6 +67,7 @@ def check_notice(root: Path) -> CheckResult:
 
 
 def check_standard_terms_url(root: Path) -> CheckResult:
+    """Check that the Standard Terms URL is valid and contains required content."""
     notice_content = None
     for name in ["NOTICE", "NOTICE.md", "NOTICE.txt"]:
         p = root / name
@@ -76,7 +77,7 @@ def check_standard_terms_url(root: Path) -> CheckResult:
     if not notice_content:
         return CheckResult("standard-terms-url", False, "Cannot check URL: no NOTICE file")
 
-    urls = re.findall(r"https?://[^\s\"'<>]+", notice_content)
+    urls = re.findall(r"https?://[^\s\>\"'<]+", notice_content)
     if not urls:
         return CheckResult("standard-terms-url", False, "No URL found in NOTICE")
 
@@ -84,6 +85,7 @@ def check_standard_terms_url(root: Path) -> CheckResult:
     if not url.startswith("https://"):
         return CheckResult("standard-terms-url", False, f"URL must use HTTPS: {url}")
 
+    # Fetch and check the page content
     try:
         req = urllib.request.Request(url, method="HEAD",
                                      headers={"User-Agent": "OPL-Checker/1.0"})
@@ -92,8 +94,6 @@ def check_standard_terms_url(root: Path) -> CheckResult:
             if "text/html" not in ct:
                 return CheckResult("standard-terms-url", False,
                                    f"URL does not return HTML (got {ct}): {url}", "warning")
-            return CheckResult("standard-terms-url", True,
-                               f"Standard Terms URL is reachable: {url}")
     except urllib.error.HTTPError as e:
         return CheckResult("standard-terms-url", False, f"URL returned HTTP {e.code}: {url}")
     except urllib.error.URLError as e:
@@ -102,6 +102,41 @@ def check_standard_terms_url(root: Path) -> CheckResult:
     except Exception as e:
         return CheckResult("standard-terms-url", False,
                            f"URL check failed ({e}): {url}", "warning")
+
+    # Now check that the page contains substantive content
+    try:
+        req = urllib.request.Request(url, method="GET",
+                                     headers={"User-Agent": "OPL-Checker/1.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            html = resp.read().decode("utf-8", errors="ignore")
+            text = re.sub(r"<[^>]+>", " ", html)
+            text = re.sub(r"\s+", " ", text).lower()
+
+            has_pricing = any(kw in text for kw in
+                ["price", "$", "fee", "cost", "tariff", "payment", "pay", "usd", "year", "month", "subscription"])
+            has_terms = any(kw in text for kw in
+                ["commercial use", "license", "terms", "permission", "agreement", "standard terms"])
+            has_contact = any(kw in text for kw in
+                ["contact", "email", "mailto", "stripe", "bank", "sponsor"])
+
+            missing = []
+            if not has_pricing:
+                missing.append("pricing")
+            if not has_terms:
+                missing.append("commercial-use terms")
+            if not has_contact:
+                missing.append("payment mechanism or contact")
+
+            if missing:
+                return CheckResult("standard-terms-url", False,
+                    "URL reachable and HTML, but may be missing: " + ", ".join(missing) +
+                    " — verify your Standard Terms page publishes pricing, commercial-use terms, and a payment mechanism or contact.",
+                    "warning")
+            return CheckResult("standard-terms-url", True,
+                               f"Standard Terms URL is valid and publishes required content: {url}")
+    except Exception:
+        return CheckResult("standard-terms-url", True,
+                           f"Standard Terms URL is reachable: {url}")
 
 
 def check_spdx_headers(root: Path, exclude_patterns: list[str]) -> CheckResult:
