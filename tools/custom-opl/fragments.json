@@ -1,0 +1,112 @@
+{
+  "schema": "custom-opl-fragments/v1",
+  "base_license": "OPL-1.4",
+  "description": "Vetted clause fragments for the Custom OPL configurator. The configurator assembles a license ONLY from these fragments (parameterized, never free-form). Each fragment has a stable id, a slot it fills, and allowed parameter values.",
+  "fragments": {
+    "commercial_model": {
+      "slot": "§3.3 Commercial Use",
+      "options": {
+        "paid_standard_terms": {
+          "id": "cm_paid",
+          "file": "commercial_model/paid.md",
+          "desc": "Commercial Use requires payment per Maintainer's published Standard Terms URL (base OPL-1.4 behavior)."
+        },
+        "free_for_all": {
+          "id": "cm_free",
+          "file": "commercial_model/free.md",
+          "desc": "No payment required for any use; license behaves like a permissive source-available license."
+        },
+        "personal_only": {
+          "id": "cm_personal",
+          "file": "commercial_model/personal_only.md",
+          "desc": "Only Personal Use is permitted; all commercial use prohibited (most restrictive)."
+        }
+      }
+    },
+    "dosp": {
+      "slot": "§5.1 Version-Based DOSP",
+      "options": {
+        "off": {
+          "id": "dosp_off",
+          "file": "dosp/off.md",
+          "desc": "No scheduled conversion. Pure fair-source; converts to Apache 2.0 only on abandonment (if at all)."
+        },
+        "months": {
+          "id": "dosp_months",
+          "file": "dosp/months.md",
+          "desc": "Scheduled conversion to Apache 2.0 N months after each Version's release. N is any positive integer (recommended 24-60; longer allowed).",
+          "param": "dosp_months_value"
+        },
+        "forever_frozen": {
+          "id": "dosp_frozen",
+          "file": "dosp/forever_frozen.md",
+          "desc": "No conversion ever. Code stays source-available permanently. NOT Fair Source.",
+          "fair_source": false
+        }
+      }
+    },
+    "abandonment": {
+      "slot": "§5 Abandonment",
+      "options": {
+        "convert_apache": {
+          "id": "ab_convert",
+          "file": "abandonment/convert.md",
+          "desc": "After abandonment period of unresponsiveness, Work converts to Apache 2.0 (base behavior).",
+          "param": "abandonment_months_value"
+        },
+        "freeze_forever": {
+          "id": "ab_freeze",
+          "file": "abandonment/freeze.md",
+          "desc": "On abandonment, code stays source-available; no conversion. NOT Fair Source.",
+          "fair_source": false
+        },
+        "custom_period": {
+          "id": "ab_custom",
+          "file": "abandonment/custom.md",
+          "desc": "Abandonment period set to a custom value (12-60 months).",
+          "param": "abandonment_months_value"
+        }
+      }
+    },
+    "opl_ai": {
+      "slot": "§3.5 OPL-AI Addendum",
+      "options": {
+        "out": { "id": "ai_out", "file": "opl_ai/out.md", "desc": "OPL-AI addendum not incorporated (default)." },
+        "in": { "id": "ai_in", "file": "opl_ai/in.md", "desc": "OPL-AI addendum incorporated; AI training restricted." }
+      }
+    },
+    "rate_stability": {
+      "slot": "§13 / Commercial Terms",
+      "options": {
+        "changeable": { "id": "rs_change", "file": "rate/changeable.md", "desc": "Maintainer may change commercial terms with notice." },
+        "immutable_per_version": { "id": "rs_immutable", "file": "rate/immutable.md", "desc": "Commercial terms immutable per Version (binding COMMERCIAL_TERMS.md)." }
+      }
+    },
+    "derivative": {
+      "slot": "§3.2 Derivative",
+      "options": {
+        "light_copyleft": { "id": "dv_light", "file": "derivative/light.md", "desc": "Derivatives must carry OPL/compatible notice (base behavior)." },
+        "off": { "id": "dv_off", "file": "derivative/off.md", "desc": "No derivative notice requirement (more permissive)." }
+      }
+    },
+    "trademark": {
+      "slot": "§10 Trademark",
+      "options": {
+        "none": { "id": "tm_none", "file": "trademark/none.md", "desc": "No trademark assertion." },
+        "asserted": { "id": "tm_assert", "file": "trademark/asserted.md", "desc": "Maintainer asserts trademark per NOTICE." }
+      }
+    },
+    "jurisdiction": {
+      "slot": "§12 Governing Law",
+      "options": {
+        "vetted_list": { "id": "jur_vetted", "file": "jurisdiction/vetted.md", "desc": "One of the vetted jurisdictions.", "param": "jurisdiction_value" },
+        "custom": { "id": "jur_custom", "file": "jurisdiction/custom.md", "desc": "Custom jurisdiction text.", "param": "jurisdiction_value" }
+      }
+    }
+  },
+  "hard_blocks": [
+    "dosp:forever_frozen + fair_source_label = BLOCK (a no-conversion variant is NOT Fair Source)",
+    "abandonment:freeze_forever + fair_source_label = BLOCK",
+    "commercial_model:personal_only + dosp:months = WARN (a personal-only work gaining DOSP is unusual but allowed)"
+  ]
+}
