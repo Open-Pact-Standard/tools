@@ -1,0 +1,4 @@
+# Adoption Kit build output (regenerate with: python3 make_kit.py)
+dist/
+__pycache__/
+*.pyc
