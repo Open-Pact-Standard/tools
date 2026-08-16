@@ -91,9 +91,9 @@ def detect_language(filepath: Path) -> str | None:
     return None
 
 
-def make_header(lang: str) -> str:
+def make_header(lang: str, license_version: str = "1.4") -> str:
     prefix, suffix = COMMENT_STYLES[lang]
-    return f"{prefix}SPDX-License-Identifier: OPL-1.3.1{suffix}"
+    return f"{prefix}SPDX-License-Identifier: OPL-{license_version}{suffix}"
 
 
 def has_spdx(filepath: Path) -> bool:
@@ -114,8 +114,8 @@ def is_binary(filepath: Path) -> bool:
         return True
 
 
-def inject_header(filepath: Path, lang: str, dry_run: bool = False) -> bool:
-    header = make_header(lang)
+def inject_header(filepath: Path, lang: str, dry_run: bool = False, license_version: str = "1.4") -> bool:
+    header = make_header(lang, license_version)
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             content = f.read()
@@ -157,9 +157,11 @@ from _version import __version__  # noqa: E402
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Add SPDX-License-Identifier: OPL-1.3.1 headers to source files"
+        description="Add SPDX-License-Identifier: OPL headers to source files"
     )
     parser.add_argument("--version", action="version", version=f"OPL Adoption Tools {__version__}")
+    parser.add_argument("--license-version", default="1.4",
+                        help="OPL version written in the SPDX header (default: 1.4).")
     parser.add_argument("directory", nargs="?", default=".",
                         help="Root directory to scan (default: .)")
     parser.add_argument("--dry-run", action="store_true",
@@ -197,7 +199,7 @@ def main() -> None:
     for fpath in missing:
         lang = detect_language(fpath)
         rel = fpath.relative_to(root)
-        if inject_header(fpath, lang, args.dry_run):
+        if inject_header(fpath, lang, args.dry_run, args.license_version):
             count += 1
             print(f"  {mode}Added header: {rel} ({lang})")
 
