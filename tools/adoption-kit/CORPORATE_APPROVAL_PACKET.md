@@ -38,18 +38,23 @@ opted in, on a scheduled DOSP date (§5.1).
   commercial users get a **90-day wind-down** (§3.7).
 
 ## 5. Conversion triggers (§5, §5.1) — the escape hatches
-- **Abandonment (§5):** Maintainer unreachable for the declared period (default
-  **36 months**) → the Work is **deemed to convert to Apache-2.0**. No fiscal
-  sponsor, no public notice, no counter-process.
-  - *Honest note for reviewers:* the license declares the conversion automatic,
-    but a copyright holder must still perform the relicensing act. In practice
-    this means the Work's rights are granted to all under Apache-2.0 terms from
-    that date; an adopter relying on the conversion should retain evidence of
-    the Maintainer's unreachability. This is the standard fair-source
-    abandonment model — the same limitation applies to all such licenses.
+- **Abandonment (§5):** if no Maintainer is reachable for the declared period
+  (default **36 months**), the Maintainer **grants each recipient an Apache-2.0
+  license, effective automatically** — a *standing conditional grant* that
+  requires **no actor, successor, or registry**. The fallback works even if the
+  Maintainer and any Successor have vanished.
+  - *Optional Designated Successor (Maintainer's choice, never required):* if
+    `NOTICE` names one, they are **authorized but not required** to *record* the
+    conversion by publishing an Apache-2.0 `LICENSE`. The recording is
+    conclusive evidence but **not a precondition**. A Successor may only record
+    the predefined Apache-2.0 terms — they cannot change price, modify the Work,
+    or revoke licenses. This makes OPL the most abandonment-robust fair-source
+    license: automatic by its own grant, human-recordable if the Maintainer opts
+    in, zero new infrastructure.
 - **DOSP (§5.1, opt-in):** if `NOTICE` declares a DOSP period, each Version
   converts to Apache-2.0 N months after first public release. **Silent NOTICE =
-  no scheduled conversion** (opt-out by default).
+  no scheduled conversion** (opt-out by default). The optional Successor may
+  record this trigger too.
 - Both land on **Apache License 2.0** — universally understood by scanners and
   registries. This is the interop bridge (see `INTEROPERABILITY.md`).
 

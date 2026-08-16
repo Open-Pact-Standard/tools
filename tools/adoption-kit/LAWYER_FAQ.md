@@ -32,8 +32,12 @@ conversions*, not license revocations of already-granted rights.
 
 **6. What happens if the Maintainer abandons the project?**
 If no Maintainer is reachable for the declared period (default 36 months), the
-Work **automatically converts to Apache License 2.0** (§5). No fiscal sponsor, no
-public notice, no counter-process. Your use rights survive the conversion.
+Maintainer **grants each recipient an Apache-2.0 license, effective
+automatically** (§5) — a *standing conditional grant* that needs **no actor,
+successor, or registry**. Your use rights survive the conversion. A Maintainer
+*may* (but need not) name a Designated Successor in `NOTICE`; that Successor is
+authorized to *record* the conversion but is never required to, and cannot
+change price, modify the Work, or revoke licenses. The grant holds regardless.
 
 **7. Can we get scheduled open-source conversion?**
 Yes — if the Maintainer opted into DOSP in `NOTICE` (§5.1), each Version converts
