@@ -163,6 +163,52 @@ def generate_notice(params: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def build_validation(params: dict, resolved: dict) -> str:
+    """Phase B validation gate: instructs the operator/agent to run the ported
+    legal skills over the generated LICENSE + NOTICE + COMMERCIAL_TERMS, and
+    records the outcome. The skills are LLM workflows (not scripts), so the gate
+    is a process + checklist, not a subprocess call."""
+    fs_label = "Fair Source" if params.get("_is_fair_source", False) else "Source-Available"
+    blocks = [
+        "## Validation Gate (Phase B)",
+        "",
+        f"This Custom OPL variant is **{fs_label}**. Before publishing, run the two",
+        "ported legal skills below over the generated `LICENSE`, `NOTICE`, and",
+        "`COMMERCIAL_TERMS.md`. They are LLM workflows — paste the prompt, attach",
+        "the generated files, and record the result in `validation_manifest.json`.",
+        "",
+        "### 1. Interpretive-ambiguity stress-test",
+        "Skill: `~/.hermes/skills/legal/ambiguity-stress-test-seth-chandler`",
+        "",
+        "Prompt:",
+        "> Stress-test the attached Custom OPL LICENSE (contract profile) for",
+        "> interpretive ambiguity. Treat the Customization Schedule and Provenance",
+        f"Block as part of the instrument. Focus on: the `{params.get('dosp','off')}`",
+        f"DOSP option, the `{params.get('abandonment','convert_apache')}` abandonment",
+        f"option, and the `{params.get('commercial_model','paid_standard_terms')}`",
+        "commercial-model option. For each seam, produce a dispute scenario with both",
+        "sides' arguments and a redraft. Report coverage, not just marquee findings.",
+        "",
+        "### 2. Contract risk review (Commercial Terms)",
+        "Skill: `~/.hermes/skills/legal/contract-risk-analyzer-sneha-ganapavarapu`",
+        "",
+        "Prompt:",
+        "> Review the attached `COMMERCIAL_TERMS.md` for the five critical clauses",
+        "> (Limitation of Liability, Indemnities, IP Ownership, Data Protection,",
+        "> Termination). Flag red flags and rate severity. This is a Custom OPL",
+        "> commercial-terms file; the Maintainer sets pricing, so focus on whether",
+        "> the terms are internally coherent and enforceable as written.",
+        "",
+        "### Sign-off",
+        "- [ ] Ambiguity stress-test run; seams (if any) documented in `validation_manifest.json`",
+        "- [ ] Contract risk review run; commercial terms coherent",
+        "- [ ] Maintainer reviewed and accepts the variant",
+        "",
+        "This gate is process, not a guarantee. It is not legal advice.",
+    ]
+    return "\n".join(blocks)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Assemble a Custom OPL variant from vetted fragments.")
     ap.add_argument("--params", help="JSON file with the parameter set.")
@@ -210,9 +256,11 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "LICENSE").write_text(out, encoding="utf-8")
     (out_dir / "NOTICE").write_text(generate_notice(params), encoding="utf-8")
+    (out_dir / "VALIDATION.md").write_text(build_validation(params, resolved), encoding="utf-8")
     print(f"Custom OPL variant written to {out_dir}/")
     print(f"  LICENSE  (base OPL-1.4 + Customization Schedule + Provenance)")
     print(f"  NOTICE")
+    print(f"  VALIDATION.md  (Phase B gate: run ported legal skills, record outcome)")
     print(f"  Fair Source eligible: {params.get('_is_fair_source', False)}")
     print(f"  Fragments used: {len(resolved)}")
 
