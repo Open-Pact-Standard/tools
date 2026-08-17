@@ -63,15 +63,15 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const repo = asString(parseObject(config).repo, workspaceCwd);
   const adoptArgs = [
     strFlag("repo", repo),
-    optStr("maintainer", asString(parseObject(config).maintainer, "")),
-    optStr("jurisdiction", asString(parseObject(config).jurisdiction, "United States")),
-    optStr("terms_url", asString(parseObject(config).terms_url, "")),
+    strFlag("maintainer", asString(parseObject(config).maintainer, "")),
+    strFlag("jurisdiction", asString(parseObject(config).jurisdiction, "United States")),
+    strFlag("terms_url", asString(parseObject(config).terms_url, "")),
     optFlag("commercial_model", asString(parseObject(config).commercial_model, "paid_standard_terms")),
     optFlag("opl_ai", asString(parseObject(config).opl_ai, "out")),
     optNum("abandonment", asNumber(parseObject(config).abandonment, 36)),
-    optStr("dosp", asString(parseObject(config).dosp, "")),
+    strFlag("dosp", asString(parseObject(config).dosp, "")),
     optFlag("derivative", asString(parseObject(config).derivative, "light_copyleft")),
-    optStr("trademark", asString(parseObject(config).trademark, "")),
+    strFlag("trademark", asString(parseObject(config).trademark, "")),
     optBool("confirm", !!parseObject(config).confirm),
   ].filter((a): a is string => a !== null);
 
@@ -101,21 +101,27 @@ function toResult(
   ok: boolean,
   repo: string,
 ): AdapterExecutionResult {
+  let parsed: Record<string, unknown> | null = null;
+  try {
+    parsed = JSON.parse(proc.stdout) as Record<string, unknown>;
+  } catch {
+    parsed = null;
+  }
   if (proc.timedOut) {
     return {
       exitCode: 1,
       signal: null,
       timedOut: true,
       errorMessage: `OPL Studio timed out after the configured timeout.`,
-      resultJson: { repo, ok: false, timedOut: true },
-      summary: `Adopted OPL into ${repo}: timed out.`,
+      resultJson: {
+        repo,
+        ok: false,
+        timedOut: true,
+        stderr: proc.stderr.trim(),
+        ...(parsed ?? { stdout: proc.stdout }),
+      },
+      summary: `OPL Studio adopt-full timed out for ${repo}.`,
     };
-  }
-  let parsed: Record<string, unknown> | null = null;
-  try {
-    parsed = JSON.parse(proc.stdout) as Record<string, unknown>;
-  } catch {
-    parsed = null;
   }
   const err = proc.stderr.trim().split(/\r?\n/).find((l) => l.trim().length > 0);
   return {
@@ -133,14 +139,15 @@ function toResult(
   };
 }
 
-// arg builders
-const strFlag = (k: string, v: string | null) =>
-  v && v.trim().length > 0 ? `--${k} ${JSON.stringify(v.trim())}` : null;
-const optStr = (k: string, v: string) =>
-  v && v.trim().length > 0 ? `--${k} ${JSON.stringify(v.trim())}` : null;
-const optFlag = (k: string, v: string) => `--${k} ${JSON.stringify(v)}`;
-const optNum = (k: string, v: number) => `${k}` in { k: v } && v ? `--${k} ${v}` : null;
-const optBool = (k: string, v: boolean) => (v ? `--${k} true` : null);
+// arg builders — these become argv items passed to the CLI (no shell), so use
+// shellQuote, NOT JSON.stringify (JSON.stringify("Jane <x>") yields quoted JSON,
+// not a valid argv element with spaces).
+const strFlag = (k: string, v: string | null): string | null =>
+  v && v.trim().length > 0 ? `--${k}=${v.trim()}` : null;
+const optFlag = (k: string, v: string): string => `--${k}=${v}`;
+const optNum = (k: number | string, v: number): string | null =>
+  typeof v === "number" && v > 0 ? `--${String(k)}=${v}` : null;
+const optBool = (k: string, v: boolean): string | null => (v ? `--${k}=true` : null);
 
 function buildRuntimeEnv(
   ctx: AdapterExecutionContext,

@@ -178,6 +178,9 @@ def main() -> None:
         sys.exit(1)
 
     files = collect_files(root, args.exclude)
+    if len(files) == 0:
+        print("No detectable source files found — cannot verify SPDX headers on an empty tree.")
+        sys.exit(1)
     missing = [f for f in files if not has_spdx(f)]
 
     if args.check:

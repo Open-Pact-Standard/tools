@@ -17,7 +17,10 @@ export const label = "OPL Studio";
 // not an LLM runner. Paperclip should not offer model selection.
 export const models: { id: string; label: string }[] = [];
 
-export const SANDBOX_INSTALL_COMMAND = "pip install hermes-agent";
+// OPL Studio is distributed via its GitHub repo. Install from source:
+//   pip install "git+https://github.com/Open-Pact-Standard/tools.git"
+// (it is NOT on PyPI as `hermes-agent` — that was a copy/paste mistake).
+export const SANDBOX_INSTALL_COMMAND = 'pip install "git+https://github.com/Open-Pact-Standard/tools.git"';
 
 export function resolveOplStudioCommand(config: Record<string, unknown>): string {
   const command =

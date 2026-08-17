@@ -115,9 +115,18 @@ def build_schedule(params: dict) -> str:
         opt_key = params[slot_key]
         text, opt = resolve_fragment(slot_key, opt_key)
         # substitute numeric/text params
-        text = text.replace("N months", f"{params.get('dosp_months_value', 36)} months") \
-                    .replace("the **custom value**", f"**{params.get('abandonment_months_value', 36)} months**") \
-                    .replace("the jurisdiction declared in `NOTICE`", f"**{params.get('jurisdiction_value', 'United States')}**")
+        text = text.replace("N months", f"{params.get('dosp_months_value', 36)} months")
+        text = text.replace("the **custom value**", f"**{params.get('abandonment_months_value', 36)} months**")
+        text = text.replace("the jurisdiction declared in `NOTICE`", f"**{params.get('jurisdiction_value', 'United States')}**")
+        # Inject the declared Standard Terms URL into the §3.3 schedule line so
+        # the Custom LICENSE states the actual URL, not just a reference to it.
+        if slot_key == "commercial_model" and params.get("commercial_model") == "paid_standard_terms":
+            url = params.get("terms_url", "")
+            if url:
+                text = text.replace(
+                    "per the Standard Terms URL published in `NOTICE`",
+                    f"per the Maintainer's published Standard Terms: {url}",
+                )
         resolved[slot_key] = opt
         lines.append(f"### {title} — option `{opt['id']}`")
         lines.append("")

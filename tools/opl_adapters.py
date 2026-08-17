@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: OPL-1.4
-"""OPL Studio internal plugin layer — an internal registry for the Studio's
-own capabilities (adopt, scan, kit, research, adopt-full). Each entry is a
-self-describing capability with a parameter schema + run(). This is NOT a
-Paperclip adapter — it is the Studio's in-process plugin catalogue. A real
-Paperclip adapter lives in packages/adapters/opl-studio/ and implements
-execute(ctx) -> AdapterExecutionResult against @paperclipai/adapter-utils.
+"""OPL Studio internal plugin registry — each capability the Studio exposes
+is a self-describing Plugin (Param schema + run()) registered in REGISTRY.
+This is an *in-process* extension layer for the Studio's own tools (adopt,
+scan, kit, research, adopt-full), NOT a Paperclip adapter. A real Paperclip
+adapter that dispatches this CLI from Paperclip's orchestration lives under
+packages/adapters/opl-studio/ and implements execute(ctx) against
+@paperclipai/adapter-utils (TypeScript).
 """
 from __future__ import annotations
 
@@ -145,6 +146,7 @@ def _assemble_license(p: dict, jur: str) -> str:
         "--trademark", "asserted" if p.get("trademark") else "none",
         "--jurisdiction", "free_text",
         "--jurisdiction-value", jur,
+        "--terms-url", p.get("terms_url", ""),
         "--out", str(out),
     ]
     if p.get("dosp"):
