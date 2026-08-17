@@ -66,8 +66,13 @@ def check_notice(root: Path) -> CheckResult:
     return CheckResult("notice", False, "No NOTICE file found")
 
 
-def check_standard_terms_url(root: Path) -> CheckResult:
-    """Check that the Standard Terms URL is valid and contains required content."""
+def check_standard_terms_url(root: Path, offline: bool = False) -> CheckResult:
+    """Check that the Standard Terms URL is valid and contains required content.
+
+    In offline mode the check is structural only (URL present + HTTPS) — no
+    network fetch. This keeps the Studio localhost-first: reachability/content
+    verification is opt-in via the online path.
+    """
     notice_content = None
     for name in ["NOTICE", "NOTICE.md", "NOTICE.txt"]:
         p = root / name
@@ -80,10 +85,12 @@ def check_standard_terms_url(root: Path) -> CheckResult:
     urls = re.findall(r"https?://[^\s\>\"'<]+", notice_content)
     if not urls:
         return CheckResult("standard-terms-url", False, "No URL found in NOTICE")
-
     url = urls[0].rstrip(".,;)")
     if not url.startswith("https://"):
         return CheckResult("standard-terms-url", False, f"URL must use HTTPS: {url}")
+    if offline:
+        return CheckResult("standard-terms-url", True,
+                           f"Standard Terms URL present and HTTPS (offline check, not fetched): {url}")
 
     # Fetch and check the page content
     try:
@@ -184,6 +191,8 @@ def main() -> None:
                         help="Treat warnings as errors")
     parser.add_argument("--skip-remote", action="store_true",
                         help="Skip URL reachability check")
+    parser.add_argument("--offline", action="store_true",
+                        help="Check terms URL structurally (HTTPS + present) without fetching")
     parser.add_argument("--exclude", action="append", default=[],
                         help="Exclude pattern for SPDX check")
     parser.add_argument("--check", action="store_true",
@@ -203,11 +212,13 @@ def main() -> None:
         check_license(root),
         check_notice(root),
     ]
-    if not args.skip_remote:
-        results.append(check_standard_terms_url(root))
-    else:
+    if args.skip_remote:
         results.append(CheckResult("standard-terms-url", True,
                                    "Skipped (--skip-remote)", "info"))
+    elif args.offline:
+        results.append(check_standard_terms_url(root, offline=True))
+    else:
+        results.append(check_standard_terms_url(root))
     results.append(check_spdx_headers(root, args.exclude))
     results.append(check_opl_ai(root))
 

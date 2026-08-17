@@ -197,8 +197,10 @@ register(Adapter(
 def _scan(root: Path | None, p: dict) -> AdapterResult:
     if not root or not root.is_dir():
         return AdapterResult(False, {}, ["Repository not found."])
-    skip = ["--skip-remote"] if str(p.get("skip_remote", "false")).lower() in ("1", "true", "on") else []
-    rc, so, se = run_tool("opl_check.py", *skip, str(root))
+    # The Studio UI "Skip remote URL check" checkbox means offline structural
+    # check (HTTPS + present), not a network fetch — keeps the tool localhost-first.
+    off = ["--offline"] if str(p.get("skip_remote", "false")).lower() in ("1", "true", "on") else []
+    rc, so, se = run_tool("opl_check.py", *off, str(root))
     return AdapterResult(rc == 0, {"opl_check": so}, [se] if se else [])
 
 
@@ -208,8 +210,8 @@ def _scan_diff(root: Path | None, p: dict) -> AdapterResult:
     check, so the user sees 'here is the diff' not just 'you are non-compliant'."""
     if not root or not root.is_dir():
         return AdapterResult(False, {}, ["Repository not found."])
-    skip = ["--skip-remote"] if str(p.get("skip_remote", "false")).lower() in ("1", "true", "on") else []
-    rc, so, se = run_tool("opl_check.py", "--json", *skip, str(root))
+    off = ["--offline"] if str(p.get("skip_remote", "false")).lower() in ("1", "true", "on") else []
+    rc, so, se = run_tool("opl_check.py", "--json", *off, str(root))
     try:
         results = json.loads(so) if so.strip() else []
     except Exception:
