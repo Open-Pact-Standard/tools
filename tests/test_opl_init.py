@@ -58,7 +58,8 @@ class TestGenerateNotice:
             version="1.4", maintainer="Jane Doe <jane@example.com>",
             jurisdiction="California, United States",
             terms_url="https://example.com/terms",
-            opl_ai="opted out.", abandonment="36", trademark=None
+            opl_ai="opted out.", abandonment="36", dosp=None,
+            commercial_terms="", trademark=None
         )
         result = generate_notice(args)
         assert "OPL Version: 1.4" in result
@@ -72,7 +73,7 @@ class TestGenerateNotice:
             version="1.4", maintainer="Test",
             jurisdiction="Delaware", terms_url="https://example.com/terms",
             opl_ai="opted in. AI training is restricted under the OPL-AI addendum (v1.4).",
-            abandonment="36", trademark=None
+            abandonment="36", dosp=None, commercial_terms="", trademark=None
         )
         result = generate_notice(args)
         assert "opted in" in result
@@ -81,7 +82,8 @@ class TestGenerateNotice:
         args = argparse.Namespace(
             version="1.4", maintainer="Test",
             jurisdiction="Delaware", terms_url="https://example.com/terms",
-            opl_ai="opted out.", abandonment="24", trademark=None
+            opl_ai="opted out.", abandonment="24", dosp=None,
+            commercial_terms="", trademark=None
         )
         result = generate_notice(args)
         assert "Abandonment Period: 24" in result
@@ -90,7 +92,8 @@ class TestGenerateNotice:
         args = argparse.Namespace(
             version="1.4", maintainer="Test",
             jurisdiction="Delaware", terms_url="https://example.com/terms",
-            opl_ai="opted out.", abandonment="36",
+            opl_ai="opted out.", abandonment="36", dosp=None,
+            commercial_terms="",
             trademark="MyProject is a registered trademark of Test Corp."
         )
         result = generate_notice(args)
@@ -100,7 +103,8 @@ class TestGenerateNotice:
         args = argparse.Namespace(
             version="1.4", maintainer="Test",
             jurisdiction="Delaware", terms_url="https://example.com/terms",
-            opl_ai="opted out.", abandonment="36", trademark=None
+            opl_ai="opted out.", abandonment="36", dosp=None,
+            commercial_terms="", trademark=None
         )
         result = generate_notice(args)
         assert "Abandonment" not in result
