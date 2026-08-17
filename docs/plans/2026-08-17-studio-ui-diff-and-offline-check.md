@@ -331,7 +331,19 @@ Manual browser check:
 4. Open `scan` with `Skip remote URL check` checked → runs with no network fetch.
 
 ## Success criteria
-- [ ] Studio `scan` shows `report|diff` selector and renders `outputs.diff` with an Apply button.
-- [ ] Apply runs `adopt-full --confirm true` and writes NOTICE+SPDX locally.
-- [ ] `opl_check --offline` validates §3.3 without a network call; studio defaults to offline.
-- [ ] `tests/test_scan_diff.py`, `tests/test_catalogue.py`, `tests/test_offline_terms.py` pass and lock the contracts.
+- [x] Studio `scan` shows `report|diff` selector and renders `outputs.diff` with an Apply button.
+- [x] Apply runs `adopt-full --confirm true` and writes NOTICE+SPDX locally.
+- [x] `opl_check --offline` validates §3.3 without a network call; studio defaults to offline.
+- [x] `tests/test_scan_diff.py`, `tests/test_catalogue.py`, `tests/test_offline_terms.py` pass and lock the contracts.
+
+## Execution log
+- Task 1: `910b787` — scan diff render in browser
+- Task 2: `d9cf440` — mode select + Apply → adopt-full
+- Task 3: `8778a0e` — offline-first §3.3 terms check (+ tests)
+- Task 4: `96f721a` — pin diff/migrate/6-cap contracts (tests)
+
+## Known pre-existing issue (out of scope)
+The repo-wide suite has ~25 failures in `test_spdx_inject.py`,
+`test_opl_init.py`, `test_integration.py`, `test_canary_edge_cases.py`
+asserting `OPL-1.3.1` while the tools emit `OPL-1.4`. Version-string drift
+unrelated to this plan. This plan's 6 new tests pass.
