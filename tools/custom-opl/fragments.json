@@ -99,8 +99,7 @@
     "jurisdiction": {
       "slot": "§12 Governing Law",
       "options": {
-        "vetted_list": { "id": "jur_vetted", "file": "jurisdiction/vetted.md", "desc": "One of the vetted jurisdictions.", "param": "jurisdiction_value" },
-        "custom": { "id": "jur_custom", "file": "jurisdiction/custom.md", "desc": "Custom jurisdiction text.", "param": "jurisdiction_value" }
+        "free_text": { "id": "jur_free", "file": "jurisdiction/free.md", "desc": "Adopter declares any governing jurisdiction in NOTICE. No curated list.", "param": "jurisdiction_value" }
       }
     }
   },

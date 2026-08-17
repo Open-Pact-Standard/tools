@@ -6,8 +6,6 @@ from typing import Any, Callable
 import re
 from pathlib import Path
 
-VALID_JURISDICTIONS = ["California, United States", "Delaware, United States", "New York, United States", "England and Wales", "Ontario, Canada", "New South Wales, Australia", "Singapore", "Dublin, Ireland", "Berlin, Germany"]
-
 BANNER = r"""
   ___  ____  _     _____  ____ _  __
  / _ \/ __ \| |   |  ___|/ ___| |/ /
@@ -70,14 +68,7 @@ def interactive_mode() -> argparse.Namespace:
     args = argparse.Namespace()
     args.version = "1.4"
     args.maintainer = ask("Maintainer name and email (e.g. Jane Doe <jane@example.com>)", validator=lambda v: len(v) > 3, err_msg="Please provide a name and contact.")
-    print("\n  Common jurisdictions:")
-    for i, j in enumerate(VALID_JURISDICTIONS, 1):
-        print(f"    {i}. {j}")
-    jur = ask("Governing Jurisdiction (number or custom text)", default="1")
-    if jur.isdigit() and 1 <= int(jur) <= len(VALID_JURISDICTIONS):
-        args.jurisdiction = VALID_JURISDICTIONS[int(jur) - 1]
-    else:
-        args.jurisdiction = jur
+    args.jurisdiction = ask("Governing Jurisdiction (write your own — any jurisdiction; e.g. 'United States', 'Germany', 'Tokyo, Japan')", default="United States")
     print("\n  Standard Terms URL: a page where your commercial-use pricing lives.")
     print("  Must be HTTPS, return 2xx, serve HTML, and be readable without login.\n")
     args.terms_url = ask("Standard Terms URL (https://...)", validator=validate_url, err_msg="URL must start with https://")

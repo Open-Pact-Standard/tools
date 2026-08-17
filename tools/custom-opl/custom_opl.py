@@ -59,7 +59,7 @@ def load_params_from_args(cli: argparse.Namespace) -> dict:
     # numeric / text params
     p["dosp_months_value"] = cli.dosp_months or 36
     p["abandonment_months_value"] = cli.abandonment_months or 36
-    p["jurisdiction_value"] = cli.jurisdiction_value or "United States (state optional; S9.4 covers consumers)"
+    p["jurisdiction_value"] = cli.jurisdiction_value or "United States"
     return p
 
 
@@ -117,8 +117,7 @@ def build_schedule(params: dict) -> str:
         # substitute numeric/text params
         text = text.replace("N months", f"{params.get('dosp_months_value', 36)} months") \
                     .replace("the **custom value**", f"**{params.get('abandonment_months_value', 36)} months**") \
-                    .replace("the vetted jurisdiction", f"**{params.get('jurisdiction_value', 'United States (state optional; S9.4 covers consumers)')}**") \
-                    .replace("the custom jurisdiction", f"**{params.get('jurisdiction_value', 'United States (state optional; S9.4 covers consumers)')}**")
+                    .replace("the jurisdiction declared in `NOTICE`", f"**{params.get('jurisdiction_value', 'United States')}**")
         resolved[slot_key] = opt
         lines.append(f"### {title} — option `{opt['id']}`")
         lines.append("")
@@ -219,8 +218,8 @@ def main() -> None:
     ap.add_argument("--fair-source-label", choices=["auto", "fair_source", "source_available"], default="auto")
     ap.add_argument("--dosp-months", type=int, default=36)
     ap.add_argument("--abandonment-months", type=int, default=36)
-    ap.add_argument("--jurisdiction-value", default="United States (state optional; S9.4 covers consumers)",
-                    help="Vetted jurisdiction code (DE/FR/UK/JP/BR/US/CA/AU/IN/CH/KR/NL/IT/ES/CN/IL/EU) or custom text. US state is optional; local mandatory law applies via S9.4.")
+    ap.add_argument("--jurisdiction-value", default="United States",
+                    help="Any governing jurisdiction you declare in NOTICE (free text). No curated list. S9.4 subordinates to local mandatory law.")
     for slot in DEFAULTS:
         ap.add_argument(f"--{slot.replace('_', '-')}", choices=list(FRAGMENTS["fragments"][slot]["options"].keys()))
     cli = ap.parse_args()
