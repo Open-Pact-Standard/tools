@@ -1,16 +1,11 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: OPL-1.4
-"""OPL Studio adapter layer — Paperclip-style integrations catalogue.
-
-Each capability the studio exposes is an *Adapter*: a self-describing plugin with
-a parameter schema and a run() that operates on a repo (or locally) and returns
-structured output. The studio discovers adapters from REGISTRY and renders them
-as a catalogue; new capabilities are added by registering a new Adapter — no
-server changes. This is the "bring-your-own / integrations catalogue" pattern
-from paperclipai/paperclip, kept local-only and stdlib-only.
-
-Adapters are the future API surface: if OPL Studio later becomes a hosted service,
-these same adapters are what the service calls.
+"""OPL Studio internal plugin layer — an internal registry for the Studio's
+own capabilities (adopt, scan, kit, research, adopt-full). Each entry is a
+self-describing capability with a parameter schema + run(). This is NOT a
+Paperclip adapter — it is the Studio's in-process plugin catalogue. A real
+Paperclip adapter lives in packages/adapters/opl-studio/ and implements
+execute(ctx) -> AdapterExecutionResult against @paperclipai/adapter-utils.
 """
 from __future__ import annotations
 
@@ -324,3 +319,65 @@ def run_adapter(id: str, root: Path | None, params: dict) -> AdapterResult:
     if not a:
         return AdapterResult(False, {}, [f"Unknown adapter: {id}"])
     return a.run(root, params)
+
+
+def _cli_argv_params(argv: list[str]) -> tuple[str, dict]:
+    """Parse --run <id> --repo X --maintainer Y --json etc. into (id, params)."""
+    import argparse
+    p = argparse.ArgumentParser(description="Run an OPL Studio adapter (JSON for harnesses).")
+    p.add_argument("--run", required=True, help="Adapter id to run (e.g. adopt-full).")
+    p.add_argument("--repo", default="", help="Repository path.")
+    p.add_argument("--json", action="store_true", dest="as_json", help="Emit JSON result.")
+    p.add_argument("--maintainer", default="")
+    p.add_argument("--jurisdiction", default="United States")
+    p.add_argument("--terms_url", default="")
+    p.add_argument("--commercial_model", default="paid_standard_terms")
+    p.add_argument("--opl_ai", default="out")
+    p.add_argument("--abandonment", default="36")
+    p.add_argument("--dosp", default="")
+    p.add_argument("--derivative", default="light_copyleft")
+    p.add_argument("--trademark", default="")
+    p.add_argument("--confirm", default="false", help="true/false — write into repo.")
+    args = p.parse_args(argv)
+    params = {
+        "repo": args.repo,
+        "maintainer": args.maintainer,
+        "jurisdiction": args.jurisdiction,
+        "terms_url": args.terms_url,
+        "commercial_model": args.commercial_model,
+        "opl_ai": args.opl_ai,
+        "abandonment": args.abandonment,
+        "dosp": args.dosp,
+        "derivative": args.derivative,
+        "trademark": args.trademark,
+        "confirm": args.confirm,
+    }
+    return args.run, params
+
+
+if __name__ == "__main__":
+    # Harness entry point: `python3 opl_adapters.py --run adopt-full --repo X ...`
+    # Emits the AdapterResult as JSON on stdout so any orchestrator (Paperclip,
+    # Claude Code, Codex, cron) can drive the adoption pipeline.
+    import sys
+    as_json = "--json" in sys.argv
+    argv = [a for a in sys.argv[1:] if a != "--json" and a != "--adopt-full-json"]
+    aid, params = _cli_argv_params(argv)
+    root = Path(params["repo"]).resolve() if params.get("repo") and (Path(params["repo"]).is_dir()) else None
+    res = run_adapter(aid, root, params)
+    if as_json:
+        import json
+        print(json.dumps({
+            "ok": res.ok,
+            "outputs": res.outputs,
+            "messages": res.messages,
+            "consequence": res.consequence,
+        }, indent=2))
+    else:
+        print(f"[{'OK' if res.ok else 'FAIL'}] adapter {aid}")
+        for k, v in res.outputs.items():
+            print(f"\n--- {k} ---"); print(v)
+        for m in res.messages: print(m)
+        if res.consequence: print(f"\nConsequence:\n{res.consequence}")
+    sys.exit(0 if res.ok else 1)
+

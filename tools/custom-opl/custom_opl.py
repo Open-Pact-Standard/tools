@@ -35,7 +35,7 @@ DEFAULTS = {
     "rate_stability": "immutable_per_version",
     "derivative": "light_copyleft",
     "trademark": "none",
-    "jurisdiction": "vetted_list",
+    "jurisdiction": "free_text",
 }
 
 

@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: OPL-1.4
-"""OPL Studio — localhost adoption studio (Paperclip-style: adapter catalogue +
+"""OPL Studio — localhost adoption studio (internal capability catalogue +
 live visual builder). Stdlib only, local-first, NO external network calls. Compiles
-to real files you own. The browser only ever talks to 127.0.0.1:<port>."
+to real files you own. The browser only ever talks to 127.0.0.1:<port>.
+
+Capabilities (adopt, scan, kit, research, adopt-full) are registered in
+opl_adapters.py as an internal plugin layer. A separate packages/adapters/opl-studio/
+is a real Paperclip adapter if/when this Studio should be dispatchable from
+Paperclip's orchestration; these are distinct layers."
 
 Run:  python3 opl_studio.py            # http://localhost:8771
       python3 opl_studio.py --port 9xxx --no-browser
@@ -89,8 +94,10 @@ def adapters_page() -> str:
         for a in adapters.catalogue()
     )
     return f"""
-<h1>Studio — Adapter Catalogue</h1>
-<p class="note">Pick a capability. Each is a pluggable adapter (see opl_adapters.py).</p>
+<h1>Studio</h1>
+<p class="note">Pick a capability. Each is a registered internal tool (see opl_adapters.py).
+A real Paperclip adapter for dispatching Studio from Paperclip's harness lives separately
+under packages/adapters/opl-studio/ — this local site is the in-process catalogue.</p>
 <div class="cat">{caps}</div>
 <div id="panel" class="hidden"></div>
 <script>

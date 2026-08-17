@@ -1,0 +1,23 @@
+{
+  "name": "@paperclipai/adapter-opl-studio",
+  "version": "0.3.1",
+  "license": "MIT",
+  "homepage": "https://github.com/paperclipai/paperclip",
+  "description": "Paperclip adapter that dispatches the Open-Pact License Studio to adopt OPL into a workspace repo.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server/index.ts",
+    "./cli": "./src/cli/index.ts",
+    "./ui": "./src/ui/index.ts"
+  },
+  "files": ["src"],
+  "dependencies": {
+    "@paperclipai/adapter-utils": "workspace:*"
+  },
+  "peerDependencies": {
+    "@paperclipai/adapter-utils": "workspace:*",
+    "typescript": ">=5.0.0"
+  }
+}

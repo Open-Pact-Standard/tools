@@ -36,3 +36,31 @@ silently mutates your files.
 
 Python 3.9+ (standard library only — `http.server`, `webbrowser`). No pip
 dependencies.
+
+## Harness / agent interface (no browser needed)
+
+Any orchestrator — Paperclip, Claude Code, Codex, a cron job, or `curl` — can
+build a license on behalf of a user by calling the JSON entry point directly:
+
+```bash
+python3 opl_adapters.py --run adopt-full --json \
+  --repo /path/to/repo \
+  --maintainer "Acme Corp <ops@acme.com>" \
+  --jurisdiction "United States" \
+  --terms_url "https://acme.com/terms" \
+  --dosp 36 \
+  --confirm true
+```
+
+With `--confirm false` (default) it returns `{ok, outputs:{NOTICE,LICENSE}, consequence}`
+without writing. With `--confirm true` it writes NOTICE + SPDX in place and runs
+`opl_check`, returning the result in `outputs.opl_check`. Output is JSON on
+stdout — designed for machines; the Studio browser UI calls the same adapter.
+
+A real **Paperclip adapter** that dispatches this CLI from Paperclip's
+orchestration layer lives under
+`packages/adapters/opl-studio/` (`execute(ctx)` spawns
+`opl_adapters.py --run adopt-full --json` and returns a structured
+`AdapterExecutionResult`). The browser UI and the harness path share the same
+internal plugin layer — neither is a "wrapper"; the Paperclip adapter is the
+bridge to Paperclip's scheduler/sandbox.
