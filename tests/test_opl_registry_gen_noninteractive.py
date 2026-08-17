@@ -8,8 +8,6 @@ import sys
 from contextlib import redirect_stdout
 from pathlib import Path
 
-import pytest
-
 # Import the module under test (no import-time side effects).
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 import opl_registry_gen as rg

@@ -379,6 +379,10 @@ def _adopt_full(root: Path | None, p: dict) -> AdapterResult:
     if not repo or not Path(repo).is_dir():
         return AdapterResult(False, {}, [],
                             "adopt-full requires a valid 'repo' path.")
+    # The validated repo param is authoritative: a harness may pass root=None
+    # while supplying repo via params, and a confirmed write must land in that
+    # repo (not silently degrade to a preview under a temp dir).
+    root = Path(repo)
     confirm = str(p.get("confirm", "false")).lower() in ("1", "true", "on", "yes")
     # Step 1: build the Adoption Kit (dist + zip) — surfaces it for download.
     kit_rc, kit_out, kit_err = run_tool("adoption-kit/make_kit.py", cwd=str(HERE))
