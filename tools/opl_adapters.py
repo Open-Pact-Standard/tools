@@ -251,6 +251,67 @@ def _research(root: Path | None, p: dict) -> AdapterResult:
     return AdapterResult(True, {"research": out}, [])
 
 
+# ---------------------------------------------------------------------------
+# Full-pipeline adapter: "drive the Adoption Kit" end-to-end.
+# ---------------------------------------------------------------------------
+register(Adapter(
+    id="adopt-full",
+    title="Adopt OPL (full kit drive)",
+    description="One adapter that drives the whole adoption kit end-to-end: build the "
+                "Adoption Kit, assemble NOTICE + Custom OPL LICENSE, write + inject SPDX "
+                "into the repo, then run the compliance validator. Requires a repo path.",
+    params=[
+        Param("repo", "Repository path", "repo", "",
+              help="Required. The repo NOTICE/headers will be written into."),
+        Param("maintainer", "Maintainer (name <email>)", "text", ""),
+        Param("jurisdiction", "Governing Jurisdiction", "text", "United States",
+              help="Any jurisdiction — you write it. OPL §9.4 covers all."),
+        Param("terms_url", "Standard Terms URL", "text", "",
+              help="HTTPS page publishing your commercial-use pricing."),
+        Param("commercial_model", "Commercial model", "select", "paid_standard_terms",
+              ["paid_standard_terms", "free_for_all", "personal_only"]),
+        Param("opl_ai", "OPL-AI addendum", "select", "out", ["out", "in"]),
+        Param("abandonment", "Abandonment (months)", "number", "36"),
+        Param("dosp", "DOSP period (months, blank=none)", "number", ""),
+        Param("derivative", "Derivative notice", "select", "light_copyleft",
+              ["light_copyleft", "off"]),
+        Param("trademark", "Trademark notice", "text", ""),
+        Param("confirm", "Write into repo (set true to commit)", "bool", "false",
+              help="The full drive previews first. Set true to actually write + validate."),
+    ],
+    run=lambda root, p: _adopt_full(root, p),
+))
+
+
+def _adopt_full(root: Path | None, p: dict) -> AdapterResult:
+    repo = p.get("repo", "").strip()
+    if not repo or not Path(repo).is_dir():
+        return AdapterResult(False, {}, [],
+                            "adopt-full requires a valid 'repo' path.")
+    confirm = str(p.get("confirm", "false")).lower() in ("1", "true", "on", "yes")
+    # Step 1: build the Adoption Kit (dist + zip) — surfaces it for download.
+    kit_rc, kit_out, kit_err = run_tool("adoption-kit/make_kit.py", cwd=str(HERE))
+    # Step 2: assemble NOTICE + Custom LICENSE (preview).
+    license_p = {k: v for k, v in p.items() if k != "repo" and k != "confirm"}
+    adopt_res = _adopt(root, {**license_p, "write": "false"})
+    # Step 3: if confirmed, write in place.
+    msg = []
+    if kit_out.strip():
+        msg.append(f"kit: {kit_out.strip()[:120]}")
+    if not confirm:
+        cons = adopt_res.consequence or "Preview only — set confirm=true to write to your repo."
+        return AdapterResult(True, adopt_res.outputs, msg, cons)
+    # Confirmed: write NOTICE + inject SPDX, then validate.
+    write_res = _adopt(root, {**license_p, "write": "true"})
+    msg.extend(write_res.messages)
+    scan_rc, scan_out, _ = run_tool("opl_check.py", "--skip-remote", str(root))
+    outputs = dict(adopt_res.outputs)
+    outputs["opl_check"] = scan_out
+    cons = "Repo written + validated. Remaining manual step: add OPL LICENSE.md to repo root." \
+        if scan_rc == 0 else "Written, but opl_check found issues — see opl_check output."
+    return AdapterResult(write_res.ok, outputs, msg, cons)
+
+
 def catalogue() -> list[dict]:
     return [{
         "id": a.id, "title": a.title, "description": a.description,
