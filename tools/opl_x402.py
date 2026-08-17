@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: OPL-1.3.1
+# SPDX-License-Identifier: OPL-1.4
 """x402 Payment Generator for OPL
 
 Generates HTTP 402 payment integration code and configuration

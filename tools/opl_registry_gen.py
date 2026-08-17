@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: OPL-1.3.1
+# SPDX-License-Identifier: OPL-1.4
 """OPL Registry Generator
 
-Generates a REGISTRY.json file for Tier 1 adopters of the Open-Pact License v1.3.1.
+Generates a REGISTRY.json file for Tier 1 adopters of the Open-Pact License v1.4.
 Usage: python3 opl_registry_gen.py [--non-interactive] [--output REGISTRY.json]
 """
 from __future__ import annotations
@@ -16,7 +16,7 @@ from pathlib import Path
 
 
 BANNER = """
-  OPL Registry Generator v1.3.1
+  OPL Registry Generator v1.4
   Generate a REGISTRY.json for Tier 1 adoption.
 """
 
@@ -172,7 +172,7 @@ def main() -> None:
     else:
         reciprocity = ask_yes_no("Require derivatives to also use OPL?", default=True)
     reciprocity_note = (
-        "Derivatives must be licensed under OPL-1.3.1 or later."
+        "Derivatives must be licensed under OPL-1.4 or later."
         if reciprocity else
         "Derivatives may use any compatible license."
     )
@@ -190,7 +190,7 @@ def main() -> None:
 
     registry = {
         "schema_version": "1.0",
-        "license": "OPL-1.3.1",
+        "license": "OPL-1.4",
         "maintainer": maintainer,
         "jurisdiction": jurisdiction,
         "standard_terms_url": terms_url,

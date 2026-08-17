@@ -77,17 +77,17 @@ def sample_migrated_project(tmp_path):
     src = tmp_path / "src"
     src.mkdir()
     (src / "main.py").write_text(
-        "# SPDX-License-Identifier: OPL-1.3.1\nimport os\n\ndef main():\n    print('Hello')\n"
+        "# SPDX-License-Identifier: OPL-1.4\nimport os\n\ndef main():\n    print('Hello')\n"
     )
 
     (tmp_path / "LICENSE.md").write_text(
-        "# Open-Pact License v1.3.1\n\nFull license text...\n"
+        "# Open-Pact License v1.4\n\nFull license text...\n"
     )
     (tmp_path / "NOTICE").write_text(
         "Maintainer: Jane Doe <jane@example.com>\n"
         "Standard Terms URL: https://example.com/terms\n"
         "Governing Jurisdiction: California, United States\n"
-        "OPL Version: 1.3.1\n"
+        "OPL Version: 1.4\n"
         "OPL-AI: opted out.\n"
     )
     return tmp_path
@@ -116,7 +116,7 @@ class TestFullAdoptionWorkflow:
         assert "Acme Corp" in notice
         assert "California, United States" in notice
         assert "https://acme.com/standard-terms" in notice
-        assert "1.3.1" in notice
+        assert "1.4" in notice
 
     def test_inject_adds_headers(self, sample_project):
         """Step 2: Inject SPDX headers into all source files."""
@@ -126,16 +126,16 @@ class TestFullAdoptionWorkflow:
         # Python files should have SPDX headers
         for name in ["src/main.py", "src/utils.py", "src/__init__.py"]:
             content = (sample_project / name).read_text()
-            assert "SPDX-License-Identifier: OPL-1.3.1" in content, f"{name} missing SPDX header"
+            assert "SPDX-License-Identifier: OPL-1.4" in content, f"{name} missing SPDX header"
 
         # JavaScript file should have SPDX header
-        assert "// SPDX-License-Identifier: OPL-1.3.1" in (sample_project / "app.js").read_text()
+        assert "// SPDX-License-Identifier: OPL-1.4" in (sample_project / "app.js").read_text()
 
         # HTML file should have SPDX header
-        assert "<!-- SPDX-License-Identifier: OPL-1.3.1 -->" in (sample_project / "index.html").read_text()
+        assert "<!-- SPDX-License-Identifier: OPL-1.4 -->" in (sample_project / "index.html").read_text()
 
         # CSS file should have SPDX header
-        assert "/* SPDX-License-Identifier: OPL-1.3.1 */" in (sample_project / "style.css").read_text()
+        assert "/* SPDX-License-Identifier: OPL-1.4 */" in (sample_project / "style.css").read_text()
 
         # package.json should NOT have an SPDX header (it's in SKIP_FILES as lock-adjacent... actually it's not)
         # package.json is not in SKIP_FILES but its extension 'json' maps to '// ' comments
@@ -171,7 +171,7 @@ class TestFullAdoptionWorkflow:
         # Step 2: Replace LICENSE with OPL
         (sample_project / "LICENSE").unlink()
         (sample_project / "LICENSE.md").write_text(
-            "# Open-Pact License v1.3.1\n\nFull license text...\n"
+            "# Open-Pact License v1.4\n\nFull license text...\n"
         )
 
         # Step 3: Inject SPDX headers
@@ -199,7 +199,7 @@ class TestFullAdoptionWorkflow:
             cwd=sample_project,
         )
         (sample_project / "LICENSE").unlink()
-        (sample_project / "LICENSE.md").write_text("Open-Pact License v1.3.1\n")
+        (sample_project / "LICENSE.md").write_text("Open-Pact License v1.4\n")
         run_tool("opl_spdx_inject.py", str(sample_project), cwd=sample_project)
 
         result = run_tool(
@@ -227,7 +227,7 @@ class TestMigrationWorkflow:
         )
         assert result.returncode == 0
         assert "MIT" in result.stdout
-        assert "1.3.1" in result.stdout
+        assert "1.4" in result.stdout
 
     def test_migrate_with_report(self, sample_project):
         """Migration --report should generate a markdown report."""
@@ -241,7 +241,7 @@ class TestMigrationWorkflow:
         report = report_path.read_text()
         assert "# OPL Migration Report" in report
         assert "MIT" in report
-        assert "OPL-1.3.1" in report
+        assert "OPL-1.4" in report
         assert "package.json" in report or "pyproject.toml" in report
 
     def test_migrate_dry_run(self, sample_project):
@@ -297,7 +297,7 @@ class TestRegistryWorkflow:
         data = json.loads(out.read_text())
         # Validate schema
         assert data["schema_version"] == "1.0"
-        assert data["license"] == "OPL-1.3.1"
+        assert data["license"] == "OPL-1.4"
         assert data["maintainer"] == "Open Source Inc"
         assert data["jurisdiction"] == "England and Wales"
         assert data["standard_terms_url"] == "https://opensource.com/terms"
@@ -388,20 +388,20 @@ class TestEdgeCases:
 
     def test_empty_project(self, tmp_path):
         """An empty project (no source files) should still pass compliance after setup."""
-        (tmp_path / "LICENSE.md").write_text("Open-Pact License v1.3.1\n")
+        (tmp_path / "LICENSE.md").write_text("Open-Pact License v1.4\n")
         (tmp_path / "NOTICE").write_text(
             "Maintainer: Test\nStandard Terms: https://example.com/terms\n"
-            "Jurisdiction: California\nOPL v1.3.1\n"
+            "Jurisdiction: California\nOPL v1.4\n"
         )
         result = run_tool("opl_check.py", str(tmp_path), "--skip-remote", cwd=tmp_path)
         assert result.returncode == 0
 
     def test_project_with_only_config_files(self, tmp_path):
         """A project with only config files should have no SPDX issues."""
-        (tmp_path / "LICENSE.md").write_text("Open-Pact License v1.3.1\n")
+        (tmp_path / "LICENSE.md").write_text("Open-Pact License v1.4\n")
         (tmp_path / "NOTICE").write_text(
             "Maintainer: Test\nStandard Terms: https://example.com/terms\n"
-            "Jurisdiction: California\nOPL v1.3.1\n"
+            "Jurisdiction: California\nOPL v1.4\n"
         )
         (tmp_path / "config.json").write_text('{"key": "value"}\n')
         (tmp_path / "data.yaml").write_text("key: value\n")
@@ -437,7 +437,7 @@ class TestEdgeCases:
             "Maintainer: Jane Doe\n"
             "Standard Terms URL: http://example.com/terms\n"
             "Governing Jurisdiction: California\n"
-            "OPL v1.3.1\n"
+            "OPL v1.4\n"
         )
         result = run_tool(
             "opl_check.py", str(sample_migrated_project), "--skip-remote", "--strict",

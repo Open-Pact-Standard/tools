@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """OPL License Migration Helper
 
-Helps projects migrate from MIT/Apache/GPL to the Open-Pact License v1.3.1.
+Helps projects migrate from MIT/Apache/GPL to the Open-Pact License v1.4.
 Usage: python3 opl_migrate.py [directory] [--from MIT|Apache-2.0|GPL-3.0] [--dry-run]
 """
 from __future__ import annotations
@@ -101,7 +101,7 @@ def generate_migration_report(root: Path, old_license: str, files_to_update: lis
     report = f"""# OPL Migration Report
 
 ## Current License: {old_license}
-## Target License: OPL-1.3.1 (Open-Pact License)
+## Target License: OPL-1.4 (Open-Pact License)
 
 ## Files Requiring SPDX Header Updates ({len(files_to_update)})
 
@@ -114,7 +114,7 @@ def generate_migration_report(root: Path, old_license: str, files_to_update: lis
         report += "\n## Package Manifests to Update\n\n"
         for path, field in manifests:
             rel = Path(path).relative_to(root)
-            report += f"- [x] `{rel}` -- change `{field}` to `OPL-1.3.1`\n"
+            report += f"- [x] `{rel}` -- change `{field}` to `OPL-1.4`\n"
     report += """\n## Next Steps
 
 1. Run `python3 opl_init.py` to generate your NOTICE file
@@ -131,7 +131,7 @@ def generate_migration_report(root: Path, old_license: str, files_to_update: lis
 from _version import __version__  # noqa: E402
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Migrate a project to OPL-1.3.1")
+    parser = argparse.ArgumentParser(description="Migrate a project to OPL-1.4")
     parser.add_argument("--version", action="version", version=f"OPL Adoption Tools {__version__}")
     parser.add_argument("directory", nargs="?", default=".",
                         help="Repository root (default: .)")
@@ -152,7 +152,7 @@ def main() -> None:
         print(f"Error: {root} is not a directory", file=sys.stderr)
         sys.exit(1)
 
-    print("\n  OPL License Migration Helper v1.3.1\n")
+    print("\n  OPL License Migration Helper v1.4\n")
 
     old_license = args.old_license or detect_old_license(root)
     if old_license:
@@ -162,9 +162,9 @@ def main() -> None:
         if not args.non_interactive:
             old_license = input("  Enter current license (or press Enter to skip): ").strip()
     if old_license:
-        print(f"  Migrating from {old_license} -> OPL-1.3.1\n")
+        print(f"  Migrating from {old_license} -> OPL-1.4\n")
     else:
-        print("  Migrating to OPL-1.3.1 (source license unknown)\n")
+        print("  Migrating to OPL-1.4 (source license unknown)\n")
 
     print("  Scanning repository...")
     files = collect_files(root, args.exclude)
@@ -215,7 +215,7 @@ def main() -> None:
         if manifests:
             print("\n  Package manifests to update:")
             for path, field in manifests:
-                print(f"    {Path(path).relative_to(root)} ({field} -> OPL-1.3.1)")
+                print(f"    {Path(path).relative_to(root)} ({field} -> OPL-1.4)")
 
     print("\n  Next steps:")
     print("    1. python3 opl_init.py          # Generate NOTICE file")

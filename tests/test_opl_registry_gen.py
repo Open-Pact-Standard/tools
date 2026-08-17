@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: OPL-1.4
 """Tests for opl_registry_gen.py"""
 from __future__ import annotations
 
@@ -32,7 +33,7 @@ class TestCLI:
         assert out.exists()
         data = json.loads(out.read_text())
         assert data["schema_version"] == "1.0"
-        assert data["license"] == "OPL-1.3.1"
+        assert data["license"] == "OPL-1.4"
         assert data["maintainer"] == "Acme Corp"
         assert data["jurisdiction"] == "Delaware, United States"
         assert data["standard_terms_url"] == "https://acme.com/terms"
@@ -46,7 +47,7 @@ class TestCLI:
         assert isinstance(data["payment_methods"], list)
         assert len(data["payment_methods"]) >= 1
         assert data["derivative_reciprocity"] is True
-        assert "OPL-1.3.1" in data["derivative_reciprocity_note"]
+        assert "OPL-1.4" in data["derivative_reciprocity_note"]
         assert data["ai_training"]["allowed"] is False
 
     def test_non_interactive_defaults(self, tmp_path):

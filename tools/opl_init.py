@@ -127,7 +127,7 @@ def main() -> None:
         if not all([cli.maintainer, cli.jurisdiction, cli.terms_url]):
             print("ERROR: --maintainer, --jurisdiction, and --terms-url are required in non-interactive mode.")
             sys.exit(1)
-        args = argparse.Namespace(version="1.4", maintainer=cli.maintainer, jurisdiction=cli.jurisdiction, terms_url=cli.terms_url, opl_ai="opted in. AI training is restricted under the OPL-AI addendum (v1.4)." if cli.opl_ai == "in" else "opted out.", abandonment=cli.abandonment, dosp=cli.dosp or "", commercial_terms=cli.commercial_terms or "", trademark=cli.trademark)
+        args = argparse.Namespace(version=__version__, maintainer=cli.maintainer, jurisdiction=cli.jurisdiction, terms_url=cli.terms_url, opl_ai="opted in. AI training is restricted under the OPL-AI addendum (v" + __version__ + ")." if cli.opl_ai == "in" else "opted out.", abandonment=cli.abandonment, dosp=cli.dosp or "", commercial_terms=cli.commercial_terms or "", trademark=cli.trademark)
     else:
         args = interactive_mode()
     content = generate_notice(args)

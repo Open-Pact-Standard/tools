@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: OPL-1.3.1
+# SPDX-License-Identifier: OPL-1.4
 """Smoke tests for tools._version side-effect-free contract.
 
 tools._version is imported at build time by setuptools' dynamic version

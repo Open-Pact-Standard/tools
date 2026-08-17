@@ -39,7 +39,7 @@ class TestDetectOldLicense:
         assert detect_old_license(tmp_path) == "BSD-2-Clause"
 
     def test_opl_license_returns_none(self, tmp_path):
-        (tmp_path / "LICENSE").write_text("Open-Pact License v1.3.1\n")
+        (tmp_path / "LICENSE").write_text("Open-Pact License v1.4\n")
         assert detect_old_license(tmp_path) is None
 
     def test_no_license_returns_none(self, tmp_path):
@@ -102,7 +102,7 @@ class TestGenerateMigrationReport:
         report = generate_migration_report(tmp_path, "MIT", files)
         assert "# OPL Migration Report" in report
         assert "MIT" in report
-        assert "OPL-1.3.1" in report
+        assert "OPL-1.4" in report
         assert "main.py" in report
         assert "Next Steps" in report
         assert "opl_init.py" in report
@@ -135,4 +135,4 @@ class TestCLI:
         result = subprocess.run([sys.executable, tool, str(tmp_path), "--non-interactive"], capture_output=True, text=True)
         assert result.returncode == 0
         assert "MIT" in result.stdout
-        assert "1.3.1" in result.stdout
+        assert "1.4" in result.stdout

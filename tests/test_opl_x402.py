@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: OPL-1.3.1
+# SPDX-License-Identifier: OPL-1.4
 """Tests for opl_x402.py - x402 Payment Generator"""
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: OPL-1.3.1 [ref:canary_8884084876fa] [ref:canary_af39c207d415]
+# SPDX-License-Identifier: OPL-1.4 [ref:canary_8884084876fa] [ref:canary_af39c207d415]
 # OPL Adoption Tools
 from ._version import __version__  # noqa: F401
 _CANARY_D19A588D4CDE = "7e11ee8b1efbc3a4"  # Internal config marker

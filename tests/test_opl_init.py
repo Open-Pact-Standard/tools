@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: OPL-1.4
 """Tests for opl_init.py"""
 from __future__ import annotations
 
@@ -54,13 +55,13 @@ class TestValidateNumber:
 class TestGenerateNotice:
     def test_basic_generation(self):
         args = argparse.Namespace(
-            version="1.3.1", maintainer="Jane Doe <jane@example.com>",
+            version="1.4", maintainer="Jane Doe <jane@example.com>",
             jurisdiction="California, United States",
             terms_url="https://example.com/terms",
             opl_ai="opted out.", abandonment="36", trademark=None
         )
         result = generate_notice(args)
-        assert "OPL Version: 1.3.1" in result
+        assert "OPL Version: 1.4" in result
         assert "Maintainer: Jane Doe" in result
         assert "California, United States" in result
         assert "https://example.com/terms" in result
@@ -68,9 +69,9 @@ class TestGenerateNotice:
 
     def test_with_ai_opt_in(self):
         args = argparse.Namespace(
-            version="1.3.1", maintainer="Test",
+            version="1.4", maintainer="Test",
             jurisdiction="Delaware", terms_url="https://example.com/terms",
-            opl_ai="opted in. AI training is restricted under the OPL-AI addendum (v1.3.1).",
+            opl_ai="opted in. AI training is restricted under the OPL-AI addendum (v1.4).",
             abandonment="36", trademark=None
         )
         result = generate_notice(args)
@@ -78,7 +79,7 @@ class TestGenerateNotice:
 
     def test_with_custom_abandonment(self):
         args = argparse.Namespace(
-            version="1.3.1", maintainer="Test",
+            version="1.4", maintainer="Test",
             jurisdiction="Delaware", terms_url="https://example.com/terms",
             opl_ai="opted out.", abandonment="24", trademark=None
         )
@@ -87,7 +88,7 @@ class TestGenerateNotice:
 
     def test_with_trademark(self):
         args = argparse.Namespace(
-            version="1.3.1", maintainer="Test",
+            version="1.4", maintainer="Test",
             jurisdiction="Delaware", terms_url="https://example.com/terms",
             opl_ai="opted out.", abandonment="36",
             trademark="MyProject is a registered trademark of Test Corp."
@@ -97,7 +98,7 @@ class TestGenerateNotice:
 
     def test_default_abandonment_excluded(self):
         args = argparse.Namespace(
-            version="1.3.1", maintainer="Test",
+            version="1.4", maintainer="Test",
             jurisdiction="Delaware", terms_url="https://example.com/terms",
             opl_ai="opted out.", abandonment="36", trademark=None
         )
@@ -132,4 +133,4 @@ class TestCLI:
         assert "Test Corp" in content
         assert "California" in content
         assert "https://example.com/terms" in content
-        assert "1.3.1" in content
+        assert "1.4" in content

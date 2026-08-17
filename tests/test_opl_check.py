@@ -45,7 +45,7 @@ class TestCheckLicense:
         assert r.severity == "warning"
 
     def test_opl_license(self, tmp_path):
-        (tmp_path / "LICENSE.md").write_text("# Open-Pact License v1.3.1\n...\n")
+        (tmp_path / "LICENSE.md").write_text("# Open-Pact License v1.4\n...\n")
         r = check_license(tmp_path)
         assert r.passed is True
         assert "OPL reference" in r.message
@@ -71,7 +71,7 @@ class TestCheckNotice:
         notice = """Maintainer: Jane Doe
 Standard Terms: https://example.com/terms
 Jurisdiction: California, United States
-OPL Version: 1.3.1
+OPL Version: 1.4
 """
         (tmp_path / "NOTICE").write_text(notice)
         r = check_notice(tmp_path)
@@ -90,7 +90,7 @@ Standard Terms: https://example.com/terms
     def test_incomplete_notice_missing_url(self, tmp_path):
         notice = """Maintainer: Jane Doe
 Jurisdiction: California
-OPL: 1.3.1
+OPL: 1.4
 """
         (tmp_path / "NOTICE").write_text(notice)
         r = check_notice(tmp_path)
@@ -102,7 +102,7 @@ OPL: 1.3.1
 Maintainer: Acme Corp
 Standard-Terms URL: https://acme.com/terms
 Governing Jurisdiction: Delaware
-OPL v1.3.1
+OPL v1.4
 """
         (tmp_path / "NOTICE.md").write_text(notice)
         r = check_notice(tmp_path)
@@ -116,13 +116,13 @@ class TestCheckSpdxHeaders:
         assert "No source files" in r.message or "info" in r.severity
 
     def test_all_have_spdx(self, tmp_path):
-        (tmp_path / "main.py").write_text("# SPDX-License-Identifier: OPL-1.3.1\nprint('hi')\n")
+        (tmp_path / "main.py").write_text("# SPDX-License-Identifier: OPL-1.4\nprint('hi')\n")
         r = check_spdx_headers(tmp_path, [])
         assert r.passed is True
         assert "All" in r.message
 
     def test_some_missing_spdx(self, tmp_path):
-        (tmp_path / "main.py").write_text("# SPDX-License-Identifier: OPL-1.3.1\nprint('hi')\n")
+        (tmp_path / "main.py").write_text("# SPDX-License-Identifier: OPL-1.4\nprint('hi')\n")
         (tmp_path / "utils.py").write_text("def foo(): pass\n")
         r = check_spdx_headers(tmp_path, [])
         assert r.passed is False
@@ -147,7 +147,7 @@ class TestCheckOplAi:
         assert r.passed is True
 
     def test_no_ai_config(self, tmp_path):
-        (tmp_path / "NOTICE").write_text("Maintainer: Test\nVersion: 1.3.1\n")
+        (tmp_path / "NOTICE").write_text("Maintainer: Test\nVersion: 1.4\n")
         r = check_opl_ai(tmp_path)
         assert r.passed is False
         assert "optional" in r.severity or "No OPL-AI" in r.message
@@ -175,9 +175,9 @@ class TestCLI:
         assert "spdx-headers" in names
 
     def test_fully_compliant_repo(self, tmp_path):
-        (tmp_path / "LICENSE.md").write_text("Open-Pact License v1.3.1\n")
-        (tmp_path / "NOTICE").write_text("Maintainer: Test\nStandard Terms: https://example.com/terms\nJurisdiction: California\nOPL v1.3.1\nAI training: opted out.\n")
-        (tmp_path / "main.py").write_text("# SPDX-License-Identifier: OPL-1.3.1\nprint('hi')\n")
+        (tmp_path / "LICENSE.md").write_text("Open-Pact License v1.4\n")
+        (tmp_path / "NOTICE").write_text("Maintainer: Test\nStandard Terms: https://example.com/terms\nJurisdiction: California\nOPL v1.4\nAI training: opted out.\n")
+        (tmp_path / "main.py").write_text("# SPDX-License-Identifier: OPL-1.4\nprint('hi')\n")
         tool = str(Path(__file__).resolve().parent.parent / "tools" / "opl_check.py")
         result = subprocess.run([sys.executable, tool, str(tmp_path), "--skip-remote"], capture_output=True, text=True)
         assert result.returncode == 0

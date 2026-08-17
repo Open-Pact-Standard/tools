@@ -124,34 +124,34 @@ class TestDetectLanguage:
 
 class TestMakeHeader:
     def test_python_header(self):
-        assert make_header("py") == "# SPDX-License-Identifier: OPL-1.3.1"
+        assert make_header("py") == "# SPDX-License-Identifier: OPL-1.4"
 
     def test_js_header(self):
-        assert make_header("js") == "// SPDX-License-Identifier: OPL-1.3.1"
+        assert make_header("js") == "// SPDX-License-Identifier: OPL-1.4"
 
     def test_html_header(self):
-        assert make_header("html") == "<!-- SPDX-License-Identifier: OPL-1.3.1 -->"
+        assert make_header("html") == "<!-- SPDX-License-Identifier: OPL-1.4 -->"
 
     def test_css_header(self):
-        assert make_header("css") == "/* SPDX-License-Identifier: OPL-1.3.1 */"
+        assert make_header("css") == "/* SPDX-License-Identifier: OPL-1.4 */"
 
     def test_lua_header(self):
-        assert make_header("lua") == "-- SPDX-License-Identifier: OPL-1.3.1"
+        assert make_header("lua") == "-- SPDX-License-Identifier: OPL-1.4"
 
     def test_erlang_header(self):
-        assert make_header("erl") == "% SPDX-License-Identifier: OPL-1.3.1"
+        assert make_header("erl") == "% SPDX-License-Identifier: OPL-1.4"
 
     def test_ocaml_header(self):
-        assert make_header("ml") == "(* SPDX-License-Identifier: OPL-1.3.1 *)"
+        assert make_header("ml") == "(* SPDX-License-Identifier: OPL-1.4 *)"
 
     def test_makefile_header(self):
-        assert make_header("Makefile") == "# SPDX-License-Identifier: OPL-1.3.1"
+        assert make_header("Makefile") == "# SPDX-License-Identifier: OPL-1.4"
 
     def test_all_styles_produce_valid_spdx(self):
         for lang in COMMENT_STYLES:
             header = make_header(lang)
             assert SPDX_RE.search(header), f"Language {lang} header missing SPDX: {header}"
-            assert "OPL-1.3.1" in header, f"Language {lang} header missing OPL-1.3.1: {header}"
+            assert "OPL-1.4" in header, f"Language {lang} header missing OPL-1.4: {header}"
 
 
 # --- has_spdx ---
@@ -159,7 +159,7 @@ class TestMakeHeader:
 class TestHasSpdx:
     def test_file_with_spdx(self, tmp_path):
         f = tmp_path / "main.py"
-        f.write_text("# SPDX-License-Identifier: OPL-1.3.1\nprint('hello')\n")
+        f.write_text("# SPDX-License-Identifier: OPL-1.4\nprint('hello')\n")
         assert has_spdx(f) is True
 
     def test_file_without_spdx(self, tmp_path):
@@ -213,7 +213,7 @@ class TestInjectHeader:
         f.write_text("print('hello')\n")
         assert inject_header(f, "py") is True
         content = f.read_text()
-        assert content.startswith("# SPDX-License-Identifier: OPL-1.3.1\n")
+        assert content.startswith("# SPDX-License-Identifier: OPL-1.4\n")
         assert "print('hello')" in content
 
     def test_inject_shebang_file(self, tmp_path):
@@ -221,7 +221,7 @@ class TestInjectHeader:
         f.write_text("#!/bin/bash\necho hello\n")
         assert inject_header(f, "sh") is True
         content = f.read_text()
-        assert content.startswith("#!/bin/bash\n# SPDX-License-Identifier: OPL-1.3.1\n")
+        assert content.startswith("#!/bin/bash\n# SPDX-License-Identifier: OPL-1.4\n")
         assert "echo hello" in content
 
     def test_inject_dry_run(self, tmp_path):
@@ -236,7 +236,7 @@ class TestInjectHeader:
         f.write_text("<html></html>\n")
         assert inject_header(f, "html") is True
         content = f.read_text()
-        assert "<!-- SPDX-License-Identifier: OPL-1.3.1 -->" in content
+        assert "<!-- SPDX-License-Identifier: OPL-1.4 -->" in content
 
     def test_inject_preserves_content(self, tmp_path):
         f = tmp_path / "main.py"
@@ -322,7 +322,7 @@ class TestCLI:
     def test_check_mode_passes(self, tmp_path):
         import subprocess
         f = tmp_path / "main.py"
-        f.write_text("# SPDX-License-Identifier: OPL-1.3.1\nprint('hi')\n")
+        f.write_text("# SPDX-License-Identifier: OPL-1.4\nprint('hi')\n")
         result = subprocess.run(
             [sys.executable, str(Path(__file__).resolve().parent.parent / "tools" / "opl_spdx_inject.py"),
              str(tmp_path), "--check"],
