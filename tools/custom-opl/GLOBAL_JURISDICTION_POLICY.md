@@ -104,12 +104,16 @@ caveat and it is guidance, not a license change.
 
 ## 5. Special handling: United States
 
-The US is unique: contract enforceability is **state law**, not federal. OPL's
-§12 governing-law clause is therefore load-bearing — the adopter MUST declare a
-state, not just "United States." The US brief will be federal framework + a
-note on the major adopter states (CA, NY, TX, DE). **Given the maintainer (Ikaros
-Digital LLC) is US-based, origin-canary's NOTICE jurisdiction should be updated
-from "Berlin, Germany" to a US state** (decision pending maintainer input).
+US contract enforceability is **state law**, not federal, and varies by state.
+But this is **not load-bearing for consumer coverage**: OPL's §9.4 subordinates
+to the user's local mandatory law automatically, so a Californian, Texan, or
+New Yorker all receive their state's consumer/UDAP protection regardless of what
+the NOTICE says. The governing-law clause mainly matters for **B2B disputes**
+and the **maintainer's own enforceability** against commercial users. OPL
+therefore offers "United States" as a single vetted jurisdiction; specifying a
+state is optional advisor clarity, not a requirement. This matches how App
+Store–style broad adoption works: mandatory local law, not the choice-of-law
+clause, is what protects users.
 
 ---
 

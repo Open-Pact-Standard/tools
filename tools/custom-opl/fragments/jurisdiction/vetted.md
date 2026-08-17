@@ -29,8 +29,12 @@ jurisdiction not listed is still supported via §9.4 subordination to local law.
 | EU | European Union (any MS) | civil-eu | Brussels Ibis 1215/2012 | Dir 93/13 |
 
 ## Notes for the configurator
-- `US` requires a **state** sub-selection (contract law is state law). The
-  generated NOTICE should capture both "United States" and the state.
+- `US` covers the United States. Contract enforceability is **state law** and
+  varies by state; the adopter MAY specify a state in NOTICE for B2B clarity, but
+  it is **not required** — OPL's §9.4 subordinates to the user's local mandatory
+  law (including state UDAP/consumer statutes) automatically, so consumer
+  protection holds regardless of which state is named. The vetted registry lists
+  "United States" as one jurisdiction; a state sub-note is optional advisor info.
 - `EU` resolves to the adopter's member state; DE/FR/NL/IT/ES briefs cover the
   major economies, §9.4 covers the rest.
 - `jurisdiction:custom` remains available for any non-vetted governing law; §9.4
