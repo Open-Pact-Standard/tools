@@ -165,6 +165,17 @@ function renderAdopt(d){{
     if(d.outputs['LICENSE (Custom OPL)'])document.getElementById('out-license').textContent=d.outputs['LICENSE (Custom OPL)']; }}
   if(d.consequence)document.getElementById('conseq').textContent=d.consequence;
 }}
+function applyDiff(){{
+  const f=collect('scan');
+  const params={{repo:f.repo, maintainer:f.maintainer||'', jurisdiction:f.jurisdiction||'United States',
+                terms_url:f.terms_url||'', opl_ai:f.opl_ai||'out', confirm:'true'}};
+  fetch('/api/adapter',{{method:'POST',headers:{{'Content-Type':'application/json'}},
+    body:JSON.stringify({{id:'adopt-full',params}})}}).then(r=>r.json()).then(d=>{{
+    document.getElementById('diff').textContent =
+      (d.outputs?Object.entries(d.outputs).map(([k,v])=>`# ${{k}}\n${{v}}`).join('\n\n'):'') +
+      (d.messages?('\n'+d.messages.join('\n')):'') + (d.consequence?('\n'+d.consequence):'');
+  }});
+}}
 </script>"""
 
 
