@@ -280,6 +280,39 @@ def _kit(root: Path | None, p: dict) -> AdapterResult:
 
 
 register(Adapter(
+    id="migrate",
+    title="Migrate to OPL",
+    description="Migrate an existing MIT/Apache/GPL project to the Open-Pact License. "
+                "Detects the current license, scans manifests, and generates a migration "
+                "report. Dry-run by default — nothing is written unless you confirm.",
+    params=[
+        Param("repo", "Repository path", "repo", ""),
+        Param("from_license", "Current license", "select", "MIT",
+              ["MIT", "Apache-2.0", "GPL-3.0"]),
+        Param("dry_run", "Dry run (no changes)", "bool", "true",
+              help="Preview the migration report. Set false to apply."),
+        Param("report", "Generate migration report", "bool", "true"),
+    ],
+    run=lambda root, p: _migrate(root, p),
+))
+
+
+def _migrate(root: Path | None, p: dict) -> AdapterResult:
+    if not root or not root.is_dir():
+        return AdapterResult(False, {}, ["Repository not found."])
+    from_lic = p.get("from_license", "MIT")
+    dry = str(p.get("dry_run", "true")).lower() in ("1", "true", "on", "yes")
+    report = str(p.get("report", "true")).lower() in ("1", "true", "on", "yes")
+    args = [str(root), f"--from", from_lic, "--non-interactive"]
+    if dry:
+        args.append("--dry-run")
+    if report:
+        args.append("--report")
+    rc, so, se = run_tool("opl_migrate.py", *args)
+    return AdapterResult(rc == 0, {"migration_report": so}, [se] if se else [])
+
+
+register(Adapter(
     id="research",
     title="Jurisdiction research",
     description="Pull the verified statute anchors for a jurisdiction from RESEARCH_BASE.md. "
@@ -403,6 +436,8 @@ def _cli_argv_params(argv: list[str]) -> tuple[str, dict]:
     p.add_argument("--confirm", default="false", help="true/false — write into repo.")
     p.add_argument("--mode", default="report", help="scan output mode: report | diff.")
     p.add_argument("--skip_remote", default="false", help="skip remote URL check (offline).")
+    p.add_argument("--from_license", default="MIT", help="migrate: current license (MIT|Apache-2.0|GPL-3.0).")
+    p.add_argument("--dry_run", default="true", help="migrate: true=preview only, false=apply.")
     args = p.parse_args(argv)
     params = {
         "repo": args.repo,
@@ -418,6 +453,8 @@ def _cli_argv_params(argv: list[str]) -> tuple[str, dict]:
         "confirm": args.confirm,
         "mode": args.mode,
         "skip_remote": args.skip_remote,
+        "from_license": args.from_license,
+        "dry_run": args.dry_run,
     }
     return args.run, params
 
