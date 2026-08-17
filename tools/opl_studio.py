@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: OPL-1.4
 """OPL Studio — localhost adoption studio (Paperclip-style: adapter catalogue +
-live visual builder). Stdlib only, local-first, compiles to real files you own.
+live visual builder). Stdlib only, local-first, NO external network calls. Compiles
+to real files you own. The browser only ever talks to 127.0.0.1:<port>."
 
 Run:  python3 opl_studio.py            # http://localhost:8771
       python3 opl_studio.py --port 9xxx --no-browser
