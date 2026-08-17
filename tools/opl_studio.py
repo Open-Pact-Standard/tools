@@ -102,6 +102,7 @@ under packages/adapters/opl-studio/ — this local site is the in-process catalo
 <div id="panel" class="hidden"></div>
 <script>
 const CAT = {json.dumps(adapters.catalogue())};
+function _esc(s){{return (s||'').replace(/</g,'&lt;');}}
 function openCap(id){{
   const a = CAT.find(x=>x.id===id);
   let fields = a.params.map(p=>{{
@@ -113,7 +114,9 @@ function openCap(id){{
   }}).join('');
   let live = (id==='adopt') ? `<div class="conseq" id="conseq"></div>
      <div class="row"><div><h2>NOTICE (preview)</h2><pre id="out-notice"></pre></div>
-     <div><h2>LICENSE (Custom OPL, preview)</h2><pre id="out-license"></pre></div></div>` : `<pre id="out"></pre>`;
+     <div><h2>LICENSE (Custom OPL, preview)</h2><pre id="out-license"></pre></div></div>`
+     : (id==='scan') ? `<pre id="out"></pre><div id="diff" class="diff hidden"></div>
+        <button id="applyBtn" class="hidden" onclick="applyDiff()">Apply — adopt OPL</button>` : `<pre id="out"></pre>`;
   document.getElementById('panel').className='';
   document.getElementById('panel').innerHTML = `<div class="card"><h2>${{a.title}}</h2>
      ${{fields}}
@@ -131,9 +134,21 @@ function runCap(id){{
   const f=collect(id);
   fetch('/api/adapter',{{method:'POST',headers:{{'Content-Type':'application/json'}},
     body:JSON.stringify({{id, params:f}})}}).then(r=>r.json()).then(d=>{{
+    if(id==='scan' && d.outputs && d.outputs.diff){{
+      const diff = JSON.parse(d.outputs.diff);
+      document.getElementById('out').textContent =
+        diff.checks.map(c=>`[${{c.passed?'PASS':'FAIL'}}] ${{c.check}}: ${{c.message}}`).join('\n');
+      if(diff.proposed && Object.keys(diff.proposed).length){{
+        document.getElementById('diff').classList.remove('hidden');
+        document.getElementById('diff').textContent =
+          Object.entries(diff.proposed).map(([k,v])=>`# ${{k}}\n${{v}}`).join('\n\n');
+        document.getElementById('applyBtn').classList.remove('hidden');
+      }}
+      return;
+    }}
     if(id==='adopt' && f.write!=='true'){{ renderAdopt(d); return; }}
     let out=document.getElementById(id==='adopt'?'out-license':'out');
-    out.textContent = (d.outputs?Object.entries(d.outputs).map(([k,v])=>`# ${{k}}\\n${{v}}`).join('\\n\\n'):'') + (d.messages?('\\n'+d.messages.join('\\n')):'') + (d.consequence?('\\n'+d.consequence):'');
+    out.textContent = (d.outputs?Object.entries(d.outputs).map(([k,v])=>`# ${{k}}\n${{v}}`).join('\n\n'):'') + (d.messages?('\n'+d.messages.join('\n')):'') + (d.consequence?('\n'+d.consequence):'');
   }});
 }}
 function previewAdopt(id){{
