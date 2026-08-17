@@ -59,7 +59,7 @@ def load_params_from_args(cli: argparse.Namespace) -> dict:
     # numeric / text params
     p["dosp_months_value"] = cli.dosp_months or 36
     p["abandonment_months_value"] = cli.abandonment_months or 36
-    p["jurisdiction_value"] = cli.jurisdiction_value or "Berlin, Germany"
+    p["jurisdiction_value"] = cli.jurisdiction_value or "United States (specify state in NOTICE)"
     return p
 
 
@@ -219,7 +219,8 @@ def main() -> None:
     ap.add_argument("--fair-source-label", choices=["auto", "fair_source", "source_available"], default="auto")
     ap.add_argument("--dosp-months", type=int, default=36)
     ap.add_argument("--abandonment-months", type=int, default=36)
-    ap.add_argument("--jurisdiction-value", default="Berlin, Germany")
+    ap.add_argument("--jurisdiction-value", default="United States (specify state in NOTICE)",
+                    help="Vetted jurisdiction code (DE/FR/UK/JP/BR/US/CA/AU/IN/CH/KR/NL/IT/ES/CN/IL/EU) or custom text. US requires a state.")
     for slot in DEFAULTS:
         ap.add_argument(f"--{slot.replace('_', '-')}", choices=list(FRAGMENTS["fragments"][slot]["options"].keys()))
     cli = ap.parse_args()
