@@ -89,7 +89,7 @@ def main() -> None:
         jurisdiction = ask_choice("Governing jurisdiction", [
             "California, United States", "Delaware, United States",
             "New York, United States", "England and Wales",
-            "Ontario, Canada", "Berlin, Germany",
+            "Ontario, Canada", "United States",
             "New South Wales, Australia", "Singapore", "Dublin, Ireland",
         ], default="California, United States")
         terms_url = ask("Standard Terms URL (must be HTTPS)")

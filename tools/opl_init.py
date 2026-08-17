@@ -6,7 +6,7 @@ from typing import Any, Callable
 import re
 from pathlib import Path
 
-VALID_JURISDICTIONS = ["California, United States", "Delaware, United States", "New York, United States", "England and Wales", "Ontario, Canada", "Berlin, Germany", "New South Wales, Australia", "Singapore", "Dublin, Ireland"]
+VALID_JURISDICTIONS = ["California, United States", "Delaware, United States", "New York, United States", "England and Wales", "Ontario, Canada", "New South Wales, Australia", "Singapore", "Dublin, Ireland", "Berlin, Germany"]
 
 BANNER = r"""
   ___  ____  _     _____  ____ _  __
