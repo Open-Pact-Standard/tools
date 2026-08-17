@@ -13,9 +13,9 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
 
 HERE = Path(__file__).resolve().parent
 PY = sys.executable
@@ -64,7 +64,7 @@ def run_tool(script: str, *args: str, cwd: str | None = None):
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=60, cwd=cwd)
         return p.returncode, p.stdout, p.stderr
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         return -1, "", str(e)
 
 
@@ -121,7 +121,7 @@ def _adopt(root: Path | None, p: dict) -> AdapterResult:
     if write and root:
         rc, so, se = run_tool("opl_init.py", *args, "--output", str(root / "NOTICE"))
         rc2, so2, se2 = run_tool("opl_spdx_inject.py", str(root))
-        return AdapterResult(rc == 0, {}, [so.strip(), so2.strip()],
+        return AdapterResult(rc == 0 and rc2 == 0, {}, [so.strip(), so2.strip()],
                             "Wrote NOTICE + injected SPDX headers into your repo.")
     # Preview: emit NOTICE to a temp location and assemble a Custom OPL LICENSE.
     import tempfile
@@ -274,7 +274,7 @@ def _kit(root: Path | None, p: dict) -> AdapterResult:
     try:
         if not zip_path.exists():
             shutil.make_archive(str(zip_path.with_suffix("")), "zip", zip_path.parent)
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
     files = sorted(str(f.name) for f in (HERE / "adoption-kit" / "dist").rglob("*.md")) if (HERE / "adoption-kit" / "dist").exists() else []
     out = "\n".join(files) or "(run make_kit.py)"
@@ -305,7 +305,7 @@ def _migrate(root: Path | None, p: dict) -> AdapterResult:
     from_lic = p.get("from_license", "MIT")
     dry = str(p.get("dry_run", "true")).lower() in ("1", "true", "on", "yes")
     report = str(p.get("report", "true")).lower() in ("1", "true", "on", "yes")
-    args = [str(root), f"--from", from_lic, "--non-interactive"]
+    args = [str(root), "--from", from_lic, "--non-interactive"]
     if dry:
         args.append("--dry-run")
     if report:
@@ -333,7 +333,6 @@ def _research(root: Path | None, p: dict) -> AdapterResult:
     text = rb.read_text(encoding="utf-8")
     want = (p.get("jurisdiction") or "Germany").strip().lower()
     # Extract the paragraph mentioning the jurisdiction.
-    import re
     hit = ""
     for line in text.splitlines():
         if want in line.lower():

@@ -8,14 +8,13 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
 from pathlib import Path
 
 try:
     sys.path.insert(0, str(Path(__file__).parent))
-    from opl_spdx_inject import collect_files, has_spdx, detect_language, COMMENT_STYLES
+    from opl_spdx_inject import collect_files, detect_language, has_spdx
 except ImportError:
     print("Error: opl_spdx_inject.py must be in the same directory", file=sys.stderr)
     sys.exit(1)
@@ -129,6 +128,7 @@ def generate_migration_report(root: Path, old_license: str, files_to_update: lis
 
 # Single source of truth for version: read from _version.py
 from _version import __version__  # noqa: E402
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Migrate a project to OPL-1.4")
