@@ -10,6 +10,7 @@ packages/adapters/opl-studio/ and implements execute(ctx) against
 """
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -179,12 +180,17 @@ def _consequence_text(p: dict) -> str:
 register(Adapter(
     id="scan",
     title="Scan / Compliance check",
-    description="Read-only: run opl_check against a repo and report OPL compliance.",
+    description="Read-only: run opl_check against a repo. In 'diff' mode, also shows the "
+                "exact NOTICE + SPDX changes adopting OPL would make — before you commit.",
     params=[
         Param("repo", "Repository path", "repo", ""),
         Param("skip_remote", "Skip remote URL check (offline)", "bool", "false"),
+        Param("mode", "Output mode", "select", "report",
+              ["report", "diff"],
+              help="report = opl_check text; diff = proposed NOTICE + SPDX changes."),
     ],
-    run=lambda root, p: _scan(root, p),
+    run=lambda root, p: (_scan_diff(root, p) if str(p.get("mode", "report")).lower() == "diff"
+                          else _scan(root, p)),
 ))
 
 
@@ -194,6 +200,60 @@ def _scan(root: Path | None, p: dict) -> AdapterResult:
     skip = ["--skip-remote"] if str(p.get("skip_remote", "false")).lower() in ("1", "true", "on") else []
     rc, so, se = run_tool("opl_check.py", *skip, str(root))
     return AdapterResult(rc == 0, {"opl_check": so}, [se] if se else [])
+
+
+def _scan_diff(root: Path | None, p: dict) -> AdapterResult:
+    """L6 info-flow fix: show exactly what adopting OPL would change, without
+    writing. Parses opl_check --json and computes the proposed fix per failing
+    check, so the user sees 'here is the diff' not just 'you are non-compliant'."""
+    if not root or not root.is_dir():
+        return AdapterResult(False, {}, ["Repository not found."])
+    skip = ["--skip-remote"] if str(p.get("skip_remote", "false")).lower() in ("1", "true", "on") else []
+    rc, so, se = run_tool("opl_check.py", "--json", *skip, str(root))
+    try:
+        results = json.loads(so) if so.strip() else []
+    except Exception:
+        results = []
+    failed = [r for r in results if not r.get("passed") and r.get("severity") in ("error", "warning")]
+
+    diff: dict[str, object] = {"checks": results, "proposed": {}}
+    proposed: dict[str, object] = {}
+
+    # 1. NOTICE missing/incomplete → generate a preview NOTICE (no write).
+    if any(r["check"] in ("notice", "license") for r in failed):
+        import tempfile
+        tmp = Path(tempfile.mkdtemp())
+        rc_n, so_n, se_n = run_tool(
+            "opl_init.py", "--non-interactive",
+            "--maintainer", p.get("maintainer", "") or "Unspecified Maintainer",
+            "--jurisdiction", p.get("jurisdiction", "") or "United States",
+            "--terms-url", p.get("terms_url", "") or "https://example.com/standard-terms",
+            "--opl-ai", p.get("opl_ai", "out"),
+            "--output", str(tmp / "NOTICE"),
+        )
+        notice_path = tmp / "NOTICE"
+        if notice_path.exists():
+            proposed["NOTICE"] = notice_path.read_text()
+
+    # 2. SPDX headers missing → list files + exact header line (via --dry-run).
+    spdx = next((r for r in failed if r["check"] == "spdx-headers"), None)
+    if spdx:
+        rc_s, so_s, se_s = run_tool("opl_spdx_inject.py", str(root), "--dry-run")
+        proposed["SPDX_dry_run"] = so_s
+        # also enumerate the files via --check-free collect
+        rc_c, so_c, se_c = run_tool("opl_spdx_inject.py", str(root), "--check")
+        proposed["SPDX_check"] = so_c
+
+    # 3. standard-terms-url fail → surface the specific reason (already in message).
+    stu = next((r for r in failed if r["check"] == "standard-terms-url"), None)
+    if stu:
+        proposed["standard_terms_url_note"] = stu.get("message", "")
+
+    ok = rc == 0
+    summary = "Diff preview ready — review proposed changes, then Apply to adopt." if proposed else "Repo already compliant; nothing to change."
+    diff["proposed"] = proposed
+    return AdapterResult(ok, {"diff": json.dumps(diff, indent=2)}, [se] if se else [], summary)
+
 
 
 register(Adapter(
@@ -332,7 +392,8 @@ def _cli_argv_params(argv: list[str]) -> tuple[str, dict]:
     p.add_argument("--json", action="store_true", dest="as_json", help="Emit JSON result.")
     p.add_argument("--maintainer", default="")
     p.add_argument("--jurisdiction", default="United States")
-    p.add_argument("--terms_url", default="")
+    p.add_argument("--terms_url", default="", dest="terms_url")
+    p.add_argument("--terms-url", default="", dest="terms_url", help="Standard Terms URL (alias of --terms_url).")
     p.add_argument("--commercial_model", default="paid_standard_terms")
     p.add_argument("--opl_ai", default="out")
     p.add_argument("--abandonment", default="36")
@@ -340,6 +401,8 @@ def _cli_argv_params(argv: list[str]) -> tuple[str, dict]:
     p.add_argument("--derivative", default="light_copyleft")
     p.add_argument("--trademark", default="")
     p.add_argument("--confirm", default="false", help="true/false — write into repo.")
+    p.add_argument("--mode", default="report", help="scan output mode: report | diff.")
+    p.add_argument("--skip_remote", default="false", help="skip remote URL check (offline).")
     args = p.parse_args(argv)
     params = {
         "repo": args.repo,
@@ -353,6 +416,8 @@ def _cli_argv_params(argv: list[str]) -> tuple[str, dict]:
         "derivative": args.derivative,
         "trademark": args.trademark,
         "confirm": args.confirm,
+        "mode": args.mode,
+        "skip_remote": args.skip_remote,
     }
     return args.run, params
 
