@@ -84,14 +84,24 @@ def interactive_mode() -> argparse.Namespace:
     ai = ask("Opt in to OPL-AI? (in/out)", default="out")
     args.opl_ai = "opted in. AI training is restricted under the OPL-AI addendum (v1.4)." if ai.lower().startswith("in") else "opted out."
     print("\n  Abandonment period: months of unresponsiveness before Apache 2.0 conversion.")
+    print("  CONSEQUENCE: if you go silent for this long, your Work automatically")
+    print("  becomes Apache-2.0 (permissively licensed) for everyone — you lose")
+    print("  the source-available restriction. Set longer if you want more grace.\n")
     args.abandonment = ask("Abandonment period in months (12-60)", default="36", validator=lambda v: validate_number(v, 12, 60), err_msg="Must be a number between 12 and 60.")
     print("\n  DOSP period (OPTIONAL, opt-in): months after each version's release on which")
     print("  that version's source converts to Apache 2.0. Leave blank for NO scheduled")
     print("  conversion (pure fair-source). Recommended 24-60; other values allowed.\n")
+    print("  CONSEQUENCE: if you set, e.g., 36 months, then 3 years after you ship")
+    print("  version 1.0, its source becomes Apache-2.0 for everyone — even if you never")
+    print("  abandon the project. This is a scheduled, automatic release of your code.")
+    print("  Leave blank to keep full source-available control indefinitely.\n")
     raw_dosp = ask("DOSP period in months (blank = none)", default="")
     args.dosp = raw_dosp if raw_dosp and validate_number(raw_dosp, 1, 120) else ""
     print("\n  Commercial Terms file (OPTIONAL): a per-version immutable file pinning your")
     print("  exact pricing/payment/scope, so enterprise users get a predictable contract.\n")
+    print("  CONSEQUENCE: commercial users MUST pay per this published page. If the URL")
+    print("  is dead or empty, OPL's commercial tier is unenforceable. You must actually")
+    print("  publish a real pricing page before relying on paid commercial use.\n")
     args.commercial_terms = ask("Commercial Terms filename (blank = skip)", default="") or ""
     args.trademark = ask("Trademark notice (optional, press Enter to skip)", default="") or None
     return args
@@ -123,10 +133,13 @@ def main() -> None:
     content = generate_notice(args)
     out_path = cli.output
     if os.path.exists(out_path):
-        overwrite = input(f"  {out_path} already exists. Overwrite? (y/N): ").strip().lower()
-        if overwrite != "y":
-            print("  Aborted.")
-            return
+        if cli.non_interactive:
+            pass  # non-interactive: explicit --output means overwrite is intended
+        else:
+            overwrite = input(f"  {out_path} already exists. Overwrite? (y/N): ").strip().lower()
+            if overwrite != "y":
+                print("  Aborted.")
+                return
     with open(out_path, "w") as f:
         f.write(content)
     print(f"\n  NOTICE file written to {out_path}")
