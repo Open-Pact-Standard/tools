@@ -327,7 +327,7 @@ class TestCanaryEmbedderEdgeCases:
         assert manifest.merkle_root == ""
 
     def test_verify_source_no_matches(self, tmp_path):
-        from canary_embedder import CanaryEmbedder, CanaryManifest
+        from canary_embedder import CanaryEmbedder, CanaryManifest, CanaryToken
         (tmp_path / "clean.py").write_text("print('clean')\n")
         emb = CanaryEmbedder(
             project_id=1, distribution_id="abc", salt="secret",
@@ -341,7 +341,7 @@ class TestCanaryEmbedderEdgeCases:
         assert matches == []
 
     def test_verify_source_with_matches(self, tmp_path):
-        from canary_embedder import CanaryEmbedder, CanaryManifest
+        from canary_embedder import CanaryEmbedder, CanaryManifest, CanaryToken
         secret = "canary_abc123"
         (tmp_path / "leaked.py").write_text(f"# {secret}\nprint('hi')\n")
         emb = CanaryEmbedder(

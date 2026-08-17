@@ -1,6 +1,6 @@
-# SPDX-License-Identifier: OPL-1.3.1
+# SPDX-License-Identifier: OPL-1.4
 """
-OPL-1.3.1 Fingerprinting Tool — Canary Token Embedding + Release Fingerprinting
+OPL-1.4 Fingerprinting Tool — Canary Token Embedding + Release Fingerprinting
 
 Embeds unique, steganographic canary tokens into source code, builds a
 SHA3-256 Merkle tree from the canary secrets, and generates a distribution
@@ -8,7 +8,7 @@ manifest. The Merkle root is published (e.g. in a GPG-signed Git tag) so that
 discovery of a canary in a suspect codebase is cryptographically verifiable.
 
 This is the enforcement backbone for the OPL-AI addendum (v1.3.1). It is
-optional — OPL-1.3.1 does not require fingerprinting. But if a Maintainer
+optional — OPL-1.4 does not require fingerprinting. But if a Maintainer
 opts into OPL-AI and wants real, verifiable enforcement, this is the tool.
 
 Requires: Python 3.10+, stdlib only.
@@ -21,6 +21,7 @@ import math
 import os
 import re
 import random
+import sys
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -374,7 +375,7 @@ def cmd_embed(args: argparse.Namespace) -> None:
 
     print(f"""
 {'='*60}
-OPL-1.3.1 Fingerprinting — Distribution Manifest
+OPL-1.4 Fingerprinting — Distribution Manifest
 {'='*60}
   Source:        {source_dir}
   Project ID:    {args.project_id}
@@ -391,7 +392,11 @@ Step 2: Embedding tokens into source...""")
     print()
 
     print("Step 3: Building Merkle tree...")
-    root = embedder.build_merkle_tree()
+    if embedder.tokens:
+        root = embedder.build_merkle_tree()
+    else:
+        root = ""
+        print("  (no tokens embedded — empty Merkle root)")
     print(f"  Merkle root: 0x{root}\n")
 
     print("Step 4: Generating manifest...")
@@ -474,7 +479,7 @@ def cmd_verify(args: argparse.Namespace) -> None:
     print(f"""
 Scanning for canary tokens...
 {'='*60}
-OPL-1.3.1 Fingerprinting — Verification
+OPL-1.4 Fingerprinting — Verification
 {'='*60}
   Scanning:      {source_dir}
   Manifest:      {manifest_path}
@@ -510,9 +515,88 @@ metadata, and a human-readable summary suitable for legal use.
         print("\\nNo canary tokens found.\\n")
     print()
 
+def _hash_source(source_dir: Path, archive: bool) -> str:
+    """Hash a source tree (or archive) deterministically into a single digest."""
+    h = hashlib.sha3_256()
+    if archive:
+        h.update(source_dir.read_bytes())
+        return h.hexdigest()
+    for p in sorted(source_dir.rglob("*")):
+        if p.is_file():
+            h.update(p.relative_to(source_dir).as_posix().encode())
+            h.update(p.read_bytes())
+    return h.hexdigest()
+
+
+def cmd_fingerprint(args: argparse.Namespace) -> None:
+    source = Path(args.source)
+    manifest_path = Path(args.manifest)
+    if not manifest_path.exists():
+        print(f"Error: {manifest_path} not found", file=sys.stderr)
+        sys.exit(1)
+    if not (source.is_dir() or source.is_file()):
+        print(f"Error: {source} not found", file=sys.stderr)
+        sys.exit(1)
+    with open(manifest_path) as f:
+        manifest_data = json.load(f)
+    source_hash = _hash_source(source, args.archive)
+    fingerprint = {
+        "project_id": manifest_data.get("project_id"),
+        "distribution_id": manifest_data.get("distribution_id"),
+        "merkle_root": manifest_data.get("merkle_root", ""),
+        "source_hash": source_hash,
+        "archive": args.archive,
+    }
+    output = Path(args.output)
+    output.write_text(json.dumps(fingerprint, indent=2))
+    print(f"Release fingerprint written to: {output}")
+    print(f"  source_hash: 0x{source_hash}")
+    print(f"  merkle_root: 0x{fingerprint['merkle_root']}")
+
+
+def cmd_evidence(args: argparse.Namespace) -> None:
+    manifest_path = Path(args.manifest)
+    suspect = Path(args.suspect_source)
+    if not manifest_path.exists():
+        print(f"Error: {manifest_path} not found", file=sys.stderr)
+        sys.exit(1)
+    if not suspect.is_dir():
+        print(f"Error: {suspect} is not a directory", file=sys.stderr)
+        sys.exit(1)
+    with open(manifest_path) as f:
+        manifest_data = json.load(f)
+    salt = manifest_data.get("_steward_secret_salt", "")
+    embedder = CanaryEmbedder(
+        project_id=manifest_data["project_id"],
+        distribution_id=manifest_data["distribution_id"],
+        salt=salt,
+    )
+    manifest_obj = {
+        "project_id": manifest_data["project_id"],
+        "distribution_id": manifest_data["distribution_id"],
+        "salt": salt,
+        "file_hash": manifest_data.get("file_hash", ""),
+        "canary_tokens": [CanaryToken(**t) for t in manifest_data["canary_tokens"]],
+        "merkle_root": manifest_data["merkle_root"],
+    }
+    matches = embedder.verify_source(suspect, CanaryManifest(**manifest_obj))
+    evidence = {
+        "project_id": manifest_data["project_id"],
+        "distribution_id": manifest_data["distribution_id"],
+        "merkle_root": manifest_data["merkle_root"],
+        "suspect_source": str(suspect),
+        "match_count": len(matches),
+        "matches": [{"file": fp, "secret": secret} for fp, secret in matches],
+    }
+    output = Path(args.output)
+    output.write_text(json.dumps(evidence, indent=2))
+    print(f"Evidence package written to: {output}")
+    print(f"  Matches: {len(matches)}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="OPL-1.3.1 Fingerprinting Tool — canary embedding, Merkle tree, "
+        description="OPL-1.4 Fingerprinting Tool — canary embedding, Merkle tree, "
                     "release fingerprinting, and litigation evidence assembly. "
                     "Optional enforcement backbone for the OPL-AI addendum. "
                     "Stdlib-only, Python 3.10+.")
