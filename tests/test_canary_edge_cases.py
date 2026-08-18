@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import json
 import random
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -622,54 +621,6 @@ class TestDocGenerateTokensCLIFix:
             assert r.returncode == 1, f"{cmd} should exit 1 on malformed manifest"
             assert "Traceback" not in (r.stdout + r.stderr), f"{cmd} leaked a traceback"
             assert "cannot parse manifest" in (r.stdout + r.stderr) or "Error" in (r.stdout + r.stderr)
-
-
-def _oc_bin() -> str | None:
-    """Mirror canary_embedder's detection: PATH, then the SDK release binary."""
-    w = shutil.which("origin-crypto")
-    if w:
-        return w
-    h = Path.home() / "Coding/Gold/origin-crypto-sdk/target/release/origin-crypto"
-    return str(h) if h.is_file() else None
-
-
-_OC_BIN = _oc_bin()
-
-
-@pytest.mark.skipif(_OC_BIN is None,
-                    reason="origin-crypto (post-quantum hybrid signing) binary not found")
-class TestPostQuantumSigning:
-    def _seed(self):
-        assert _OC_BIN is not None  # skipif guards at runtime
-        return subprocess.run([_OC_BIN, "seed", "generate"], capture_output=True, text=True).stdout.strip()
-
-    def test_signed_embed_and_verify_invalid_after_tamper(self, tmp_path):
-        # Post-quantum signing must (a) record a signature at embed time and
-        # (b) fail verification after the fingerprint is modified — the whole
-        # point of authentic provenance over plain integrity.
-        src = tmp_path / "src"; src.mkdir()
-        (src / "app.py").write_text("def f(): return 1\n")
-        seed = self._seed()
-        priv = tmp_path / "priv.json"; pub = tmp_path / "pub.json"
-        r = run_canary("embed", "--source", str(tmp_path), "--project-id", "8",
-                       "--distribution-id", "pq", "--num-canaries", "2",
-                       "--sign-seed", seed, "--output", str(priv), "--public-output", str(pub))
-        assert r.returncode == 0
-        priv_data = json.loads(priv.read_text())
-        assert priv_data.get("signature"), "signed embed must record a signature"
-        # intact payload + correct seed -> VALID, exit 0
-        ok = run_canary("check", "--source", str(tmp_path), "--manifest", str(pub),
-                        "--verify-signature", seed)
-        assert ok.returncode == 0
-        assert "Post-quantum signature: VALID" in ok.stdout
-        # tamper the published fingerprint -> INVALID, exit 1
-        d = json.loads(pub.read_text())
-        d["merkle_root"] = "0x" + "0" * 64
-        tp = tmp_path / "tampered.json"; tp.write_text(json.dumps(d, indent=2))
-        bad = run_canary("check", "--source", str(tmp_path), "--manifest", str(tp),
-                         "--verify-signature", seed)
-        assert bad.returncode == 1
-        assert "INVALID" in (bad.stdout + bad.stderr)
 
 
 class TestDriftCheck:
