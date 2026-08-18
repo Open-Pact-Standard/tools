@@ -139,18 +139,18 @@ function runCap(id){{
     if(id==='scan' && d.outputs && d.outputs.diff){{
       const diff = JSON.parse(d.outputs.diff);
       document.getElementById('out').textContent =
-        diff.checks.map(c=>`[${{c.passed?'PASS':'FAIL'}}] ${{c.check}}: ${{c.message}}`).join('\n');
+        diff.checks.map(c=>`[${{c.passed?'PASS':'FAIL'}}] ${{c.check}}: ${{c.message}}`).join('\\n');
       if(diff.proposed && Object.keys(diff.proposed).length){{
         document.getElementById('diff').classList.remove('hidden');
         document.getElementById('diff').textContent =
-          Object.entries(diff.proposed).map(([k,v])=>`# ${{k}}\n${{v}}`).join('\n\n');
+          Object.entries(diff.proposed).map(([k,v])=>`# ${{k}}\\n${{v}}`).join('\\n\\n');
         document.getElementById('applyBtn').classList.remove('hidden');
       }}
       return;
     }}
     if(id==='adopt' && f.write!=='true'){{ renderAdopt(d); return; }}
     let out=document.getElementById(id==='adopt'?'out-license':'out');
-    out.textContent = (d.outputs?Object.entries(d.outputs).map(([k,v])=>`# ${{k}}\n${{v}}`).join('\n\n'):'') + (d.messages?('\n'+d.messages.join('\n')):'') + (d.consequence?('\n'+d.consequence):'');
+    out.textContent = (d.outputs?Object.entries(d.outputs).map(([k,v])=>`# ${{k}}\\n${{v}}`).join('\\n\\n'):'') + (d.messages?('\\n'+d.messages.join('\\n')):'') + (d.consequence?('\\n'+d.consequence):'');
   }});
 }}
 function previewAdopt(id){{
@@ -177,8 +177,8 @@ function applyDiff(){{
   fetch('/api/adapter',{{method:'POST',headers:{{'Content-Type':'application/json'}},
     body:JSON.stringify({{id:'adopt-full',params}})}}).then(r=>r.json()).then(d=>{{
     document.getElementById('diff').textContent =
-      (d.outputs?Object.entries(d.outputs).map(([k,v])=>`# ${{k}}\n${{v}}`).join('\n\n'):'') +
-      (d.messages?('\n'+d.messages.join('\n')):'') + (d.consequence?('\n'+d.consequence):'');
+      (d.outputs?Object.entries(d.outputs).map(([k,v])=>`# ${{k}}\\n${{v}}`).join('\\n\\n'):'') +
+      (d.messages?('\\n'+d.messages.join('\\n')):'') + (d.consequence?('\\n'+d.consequence):'');
   }});
 }}
 </script>"""

@@ -72,6 +72,36 @@ def test_adapters_page_renders_catalogue():
         assert i in out
 
 
+def test_adapters_js_has_no_broken_newlines():
+    """Regression guard for the 'click does nothing' bug: the page is generated
+    by a Python f-string, and escaped JS newlines (\\n inside .join('\\n')) were
+    being converted to real newlines, producing a syntax error that killed the
+    entire script block (clicking a capability did nothing).
+
+    This checks every JS string-literal newline escape survived as '\\n'
+    (backslash + n), not a raw newline byte inside quotes.
+    """
+    out = studio.adapters_page()
+    import re
+    script = re.search(r"<script>(.*?)</script>", out, re.S).group(1)
+    i = 0
+    n_joins = 0
+    while True:
+        i = script.find("join('", i)
+        if i < 0:
+            break
+        n_joins += 1
+        q = script.find("'", i)
+        e = script.find("'", q + 1)
+        arg = script[q + 1:e]
+        # A real newline inside the single-quoted arg is a break.
+        assert "\n" not in arg, f"broken JS newline in join at offset {i}: {arg!r}"
+        # Must be the JS-valid escape (backslash + n), not a bare backslash mess.
+        assert "\\n" in arg or arg == "", f"unexpected join arg {arg!r}"
+        i = q + 1
+    assert n_joins >= 4, f"expected several join calls, got {n_joins}"
+
+
 def test_kit_page_no_kit_dir():
     out = studio.kit_page()
     assert "Adoption Kit" in out
