@@ -16,14 +16,17 @@ Requires: Python 3.10+, stdlib only.
 
 import argparse
 import hashlib
-import json
-import random
-import re
-import sys
 
 # Single source of truth: the OPL tools version (stdlib-only, import-safe).
 import importlib.util
+import json
+import os
+import random
+import re
+import subprocess
+import sys
 from pathlib import Path
+
 _VERSION_PATH = Path(__file__).resolve().parent / "tools" / "_version.py"
 _spec = importlib.util.spec_from_file_location("_opl_version", _VERSION_PATH)
 _mod = importlib.util.module_from_spec(_spec)
@@ -387,6 +390,63 @@ class CanaryEmbedder:
                         pass
         return matches
 
+def _origin_crypto_bin() -> Path | None:
+    """Locate the origin-crypto (post-quantum hybrid signing) binary."""
+    import shutil
+    cands = [
+        Path(shutil.which("origin-crypto") or ""),
+        Path.home() / "Coding/Gold/origin-crypto-sdk/target/release/origin-crypto",
+    ]
+    for c in cands:
+        if c and c.is_file() and os.access(c, os.X_OK):
+            return c
+    return None
+
+
+def sign_merkle_root(root: str, seed: str, domain: str = "zti:hybrid:v1") -> dict | None:
+    """Sign the Merkle root with the Origin hybrid (Ed25519 + Falcon-1024) key.
+
+    Returns the signature dict {domain, ed25519, falcon1024} on success, or None
+    with a clear message if the origin-crypto binary is unavailable. This gives
+    a release fingerprint AUTHENTIC provenance (who signed it), not just
+    integrity — post-quantum-resistant against a forged/changed payload.
+    """
+    bin_ = _origin_crypto_bin()
+    if bin_ is None:
+        print("  (post-quantum signing skipped: origin-crypto binary not found on PATH)", file=sys.stderr)
+        return None
+    subp = subprocess.run(
+        [str(bin_), "sign", "--message", f"Merkle: 0x{root}", "--seed", seed, "--domain", domain],
+        capture_output=True, text=True,
+    )
+    if subp.returncode != 0:
+        print(f"  (post-quantum signing failed: {subp.stderr.strip()})", file=sys.stderr)
+        return None
+    try:
+        return json.loads(subp.stdout)
+    except json.JSONDecodeError:
+        print("  (post-quantum signing returned unparseable output)", file=sys.stderr)
+        return None
+
+
+def verify_merkle_signature(root: str, sig: dict, seed: str, domain: str = "zti:hybrid:v1") -> bool | None:
+    """Verify a hybrid Merkle-root signature via origin-crypto.
+
+    Returns True if valid, False if invalid/tampered, None if unavailable.
+    """
+    bin_ = _origin_crypto_bin()
+    if bin_ is None or not isinstance(sig, dict):
+        return None
+    subp = subprocess.run(
+        [str(bin_), "verify", "--message", f"Merkle: 0x{root}",
+         "--signature", json.dumps(sig), "--seed", seed, "--domain", domain],
+        capture_output=True, text=True,
+    )
+    if subp.returncode != 0:
+        return False
+    return "valid" in subp.stdout
+
+
 def build_public_payload(manifest_data: dict) -> dict:
     """Return a publishable payload with all enforcement secrets stripped.
 
@@ -403,6 +463,10 @@ def build_public_payload(manifest_data: dict) -> dict:
         "file_hash": manifest_data.get("file_hash"),
         "merkle_root": manifest_data.get("merkle_root"),
         "source_files": manifest_data.get("source_files", {}),
+        # Hybrid post-quantum signature over the Merkle root (public by design —
+        # signatures are for verification; publishing them is the point). This is
+        # what lets anyone authenticate the fingerprint, not just hash-check it.
+        "signature": manifest_data.get("signature"),
         "canary_tokens": [
             {
                 "token_id": t.get("token_id"),
@@ -479,6 +543,15 @@ Step 2: Embedding tokens into source...""")
         print("  (no tokens embedded — empty Merkle root)")
     print(f"  Merkle root: 0x{root}\n")
 
+    # Post-quantum hybrid signing (optional, additive): authenticate the Merkle
+    # root with the Origin (Ed25519 + Falcon-1024) key so a change to the public
+    # fingerprint is detectable — not just by hash mismatch, but by signature.
+    signature = None
+    if getattr(args, 'sign_seed', None):
+        signature = sign_merkle_root(root, args.sign_seed, getattr(args, 'sign_domain', 'zti:hybrid:v1'))
+        if signature:
+            print("  Post-quantum signature: hybrid Ed25519 + Falcon-1024 (signed Merkle root)")
+
     print("Step 4: Generating manifest...")
     manifest = embedder.generate_manifest(source_dir)
 
@@ -489,6 +562,7 @@ Step 2: Embedding tokens into source...""")
         'canary_tokens': [asdict(t) for t in manifest.canary_tokens],
         'source_files': manifest.source_files,
         '_steward_secret_salt': salt,
+        'signature': signature,   # carried only if post-quantum signing was used
     }
     # Ensure output dirs exist so --output .canary/priv.json just works for a
     # maintainer who organizes canaries into a folder (reg-catch: previously a
@@ -562,6 +636,26 @@ def cmd_verify(args: argparse.Namespace) -> None:
     )
     embedder.tokens = [CanaryToken(**t) for t in manifest_data['canary_tokens']]
 
+    # Post-quantum authenticity check (optional): if the manifest was signed and
+    # a steward seed is supplied, verify the Merkle-root signature. A FAIL here
+    # means the fingerprint was changed after signing — tamper evidence.
+    if getattr(args, 'verify_signature', None):
+        sig = manifest_data.get('signature')
+        root = manifest_data.get('merkle_root', '')
+        if not sig:
+            print("  NOTE: --verify-signature given but this manifest has no 'signature' "
+                  "(it wasn't post-quantum signed at embed time).", file=sys.stderr)
+        else:
+            ok = verify_merkle_signature(root, sig, args.verify_signature,
+                                         getattr(args, 'sign_domain', 'zti:hybrid:v1'))
+            if ok is True:
+                print("  Post-quantum signature: VALID (merkle root authenticated)")
+            elif ok is False:
+                print("  ✗ Post-quantum signature: INVALID — the fingerprint was modified "
+                      "or signed by a different key. Tamper evidence.", file=sys.stderr)
+            else:
+                print("  (post-quantum signature check skipped: origin-crypto unavailable)", file=sys.stderr)
+
     print(f"""
 Scanning for canary tokens...
 {'='*60}
@@ -620,6 +714,28 @@ def cmd_check(args: argparse.Namespace) -> None:
         sys.exit(1)
     manifest_data = _load_manifest(manifest_path)
     recorded_files = manifest_data.get('source_files', {})
+
+    # Post-quantum authenticity check (optional): verify the Merkle-root signature
+    # against a steward seed. This protects the PUBLIC payload (what gets published
+    # and distributed) — a changed fingerprint after signing is tamper evidence.
+    if getattr(args, 'verify_signature', None):
+        sig = manifest_data.get('signature')
+        root = manifest_data.get('merkle_root', '')
+        if not sig:
+            print("  NOTE: --verify-signature given but this manifest has no 'signature' "
+                  "(it wasn't post-quantum signed at embed time).", file=sys.stderr)
+        else:
+            ok = verify_merkle_signature(root, sig, args.verify_signature,
+                                         getattr(args, 'sign_domain', 'zti:hybrid:v1'))
+            if ok is True:
+                print("  Post-quantum signature: VALID (merkle root authenticated)")
+            elif ok is False:
+                print("  ✗ Post-quantum signature: INVALID — the fingerprint was modified or "
+                      "signed by a different key. Tamper evidence.", file=sys.stderr)
+                sys.exit(1)
+            else:
+                print("  (post-quantum signature check skipped: origin-crypto unavailable)", file=sys.stderr)
+
     if not recorded_files:
         print("Error: manifest has no 'source_files' record (generated before "
               "per-file hashing; re-run embed against this tree).", file=sys.stderr)
@@ -777,6 +893,10 @@ tips:
     embed_p.add_argument('--project-id', type=int, required=True, help='OPL project ID (arbitrary integer you choose)')
     embed_p.add_argument('--distribution-id', required=True, help='Distribution identifier (any unique string, e.g. release version or hex)')
     embed_p.add_argument('--salt', default=None, help='Secret salt for token generation (keep offline). If omitted, a random one is generated.')
+    embed_p.add_argument('--sign-seed', default=None,
+                        help='Origin hybrid (Ed25519 + Falcon-1024) signing seed hex. If given, the Merkle root is '
+                             'post-quantum-signed and the signature is recorded — authentic provenance, not just integrity.')
+    embed_p.add_argument('--sign-domain', default='zti:hybrid:v1', help='Domain label for hybrid key derivation')
     embed_p.add_argument('--strategies', default='variable,watermark,deadcode', help='Comma-separated embedding strategies: variable, watermark, deadcode')
     embed_p.add_argument('--num-canaries', type=int, default=10, help='Number of canary tokens to embed')
     embed_p.add_argument('--output', help='Output PRIVATE manifest path (default: canary_manifest.json)')
@@ -790,12 +910,19 @@ tips:
     verify_p = subparsers.add_parser('verify', help='Verify canaries in a suspect codebase')
     verify_p.add_argument('--source', required=True, help='Source directory to scan')
     verify_p.add_argument('--manifest', required=True, help='Path to canary manifest JSON')
+    verify_p.add_argument('--verify-signature', default=None,
+                        help='Origin hybrid (Ed25519 + Falcon-1024) signing seed hex. Verify the Merkle-root signature (authenticity check).')
+    verify_p.add_argument('--sign-domain', default='zti:hybrid:v1', help='Domain label for hybrid key derivation')
     verify_p.set_defaults(func=cmd_verify)
 
     check_p = subparsers.add_parser('check', help='Drift-check current source against a recorded manifest (run on every commit)')
     check_p.add_argument('--source', required=True, help='Source directory to hash')
     check_p.add_argument('--manifest', required=True, help='Path to canary manifest OR public payload JSON')
     check_p.add_argument('--allow-drift', action='store_true', help='Report drift but exit 0')
+    check_p.add_argument('--verify-signature', default=None,
+                        help='Origin hybrid (Ed25519 + Falcon-1024) signing seed hex. If the manifest carries a '
+                             'post-quantum signature, verify it against the Merkle root (authenticity check).')
+    check_p.add_argument('--sign-domain', default='zti:hybrid:v1', help='Domain label for hybrid key derivation')
     check_p.set_defaults(func=cmd_check)
 
     fp_p = subparsers.add_parser('fingerprint', help='Generate a release fingerprint for a distribution')
