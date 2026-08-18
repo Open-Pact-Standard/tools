@@ -394,6 +394,7 @@ class TestCanaryCLIEdgeCases:
         assert r.returncode != 0
 
     def test_embed_empty_dir(self, tmp_path):
+        out = tmp_path / "manifest.json"
         r = run_canary(
             "embed",
             "--source", str(tmp_path),
@@ -401,6 +402,8 @@ class TestCanaryCLIEdgeCases:
             "--distribution-id", "abc",
             "--salt", "secret",
             "--num-canaries", "2",
+            "--output", str(out),
+            "--public-output", str(tmp_path / "pub.json"),
         )
         assert r.returncode == 0
 
@@ -452,5 +455,92 @@ class TestCICDEdgeCases:
 
 
 # ---------------------------------------------------------------------------
-# js_embedder.py edge cases (import directly since no CLI)
+# Phase A fixes: secret/public split, self-exclusion, project_id, generate_tokens
 # ---------------------------------------------------------------------------
+
+class TestSecretSplit:
+    def test_public_payload_strips_secrets_and_salt(self):
+        from canary_embedder import build_public_payload
+        full = {
+            "project_id": 7, "distribution_id": "abc", "file_hash": "h1",
+            "merkle_root": "r1", "_steward_secret_salt": "TOPSECRET",
+            "canary_tokens": [
+                {"token_id": 0, "secret": "canary_abc123", "merkle_leaf": "L1", "merkle_proof": ["P"]},
+                {"token_id": 1, "secret": "canary_def456", "merkle_leaf": "L2", "merkle_proof": ["Q"]},
+            ],
+        }
+        pub = build_public_payload(full)
+        assert pub["merkle_root"] == "r1"
+        assert pub["file_hash"] == "h1"
+        assert "_steward_secret_salt" not in pub
+        raw = json.dumps(pub)
+        assert "TOPSECRET" not in raw
+        assert "canary_abc123" not in raw
+        assert "canary_def456" not in raw
+        assert len(pub["canary_tokens"]) == 2
+        assert pub["canary_tokens"][0]["merkle_proof"] == ["P"]
+
+    def test_embed_writes_public_payload_without_secrets(self, tmp_path):
+        src = tmp_path / "src"; src.mkdir()
+        (src / "app.py").write_text("def hello():\n    pass\n")
+        priv = tmp_path / "priv.json"
+        pub = tmp_path / "pub.json"
+        r = run_canary(
+            "embed", "--source", str(tmp_path), "--project-id", "9",
+            "--distribution-id", "dist", "--salt", "salt", "--num-canaries", "2",
+            "--output", str(priv), "--public-output", str(pub),
+        )
+        assert r.returncode == 0
+        priv_data = json.loads(priv.read_text())
+        pub_data = json.loads(pub.read_text())
+        # private manifest holds secrets
+        pub_raw = json.dumps(pub_data)
+        assert "secret" not in pub_raw
+        assert pub_data["merkle_root"]
+        assert priv_data["_steward_secret_salt"] == "salt"
+        # every public token carries its proof
+        for t in pub_data["canary_tokens"]:
+            assert t["merkle_proof"]
+
+    def test_embed_requires_project_id(self, tmp_path):
+        r = run_canary(
+            "embed", "--source", str(tmp_path), "--distribution-id", "d",
+            "--salt", "salt", "--num-canaries", "1",
+        )
+        assert r.returncode != 0
+
+
+class TestSelfExclusion:
+    def test_embedder_never_injects_into_own_source(self, tmp_path):
+        # Copy the tool's own source into the scan tree; embed must skip it.
+        target = tmp_path / "canary_embedder.py"
+        target.write_text("def real():\n    pass\n")
+        (tmp_path / "app.py").write_text("def f():\n    pass\n")
+        from canary_embedder import VariableInjectionEmbedder, SELF_EXCLUDED_FILENAMES
+        emb = VariableInjectionEmbedder()
+        rng = random.Random(b"x")
+        assert emb._is_excluded(target) is True
+
+    def test_is_excluded_respects_self_filenames(self, tmp_path):
+        from canary_embedder import VariableInjectionEmbedder, SELF_EXCLUDED_FILENAMES
+        emb = VariableInjectionEmbedder()
+        for name in SELF_EXCLUDED_FILENAMES:
+            assert emb._is_excluded(tmp_path / name) is True
+
+
+class TestDocGenerateTokensCLIFix:
+    def test_embed_generates_tokens_via_cli(self, tmp_path):
+        src = tmp_path / "src"; src.mkdir()
+        (src / "app.py").write_text("def main():\n    return 1\n")
+        out = tmp_path / "m.json"
+        r = run_canary(
+            "embed", "--source", str(tmp_path), "--project-id", "5",
+            "--distribution-id", "d", "--salt", "s", "--num-canaries", "3",
+            "--output", str(out),
+        )
+        assert r.returncode == 0
+        data = json.loads(out.read_text())
+        # reg-catch: cmd_embed previously never called generate_tokens, so the
+        # manifest carried zero tokens and an empty merkle root.
+        assert len(data["canary_tokens"]) == 3
+        assert data["merkle_root"]

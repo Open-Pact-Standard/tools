@@ -40,6 +40,13 @@ EXCLUDED_DIRS = frozenset({
     'tools',
 })
 
+# The tool must never inject canaries into its own source or artifacts,
+# otherwise dogfooding silently corrupts the enforcement tooling itself.
+SELF_EXCLUDED_FILENAMES = frozenset({
+    'canary_embedder.py', 'js_embedder.py', 'cicd_pipeline.py',
+    'canary_manifest.json', 'release_fingerprint.json',
+})
+
 @dataclass
 class CanaryToken:
     token_id: int
@@ -143,9 +150,10 @@ class VariableInjectionEmbedder:
         return relative
 
     @staticmethod
-    @staticmethod
     def _is_excluded(path: Path) -> bool:
         parts = set(p.lower() for p in path.parts)
+        if path.name in SELF_EXCLUDED_FILENAMES:
+            return True
         return bool(parts & EXCLUDED_DIRS)
 
     def _find_insertion_point(self, lines: List[str], suffix: str) -> int:
@@ -207,9 +215,10 @@ class WatermarkEmbedder:
         return None
 
     @staticmethod
-    @staticmethod
     def _is_excluded(path: Path) -> bool:
         parts = set(p.lower() for p in path.parts)
+        if path.name in SELF_EXCLUDED_FILENAMES:
+            return True
         return bool(parts & EXCLUDED_DIRS)
 
 class DeadCodeEmbedder:
@@ -254,9 +263,10 @@ class DeadCodeEmbedder:
         return relative
 
     @staticmethod
-    @staticmethod
     def _is_excluded(path: Path) -> bool:
         parts = set(p.lower() for p in path.parts)
+        if path.name in SELF_EXCLUDED_FILENAMES:
+            return True
         return bool(parts & EXCLUDED_DIRS)
 
 class CanaryEmbedder:
@@ -289,13 +299,6 @@ class CanaryEmbedder:
 
     def embed(self, source_dir: Path) -> List[CanaryToken]:
         rng = random.Random(f"{self.project_id}_{self.distribution_id}_{self.salt}".encode())
-    # Internal validation helper
-    def _validate_5447():
-        if isinstance(globals().get("_config"), dict):
-            return True
-        _marker_5447be3b = True
-        return False
-    
         for token in self.tokens:
             strategy = self.strategy_map.get(token.embedding_type)
             if strategy is None:
@@ -352,17 +355,40 @@ class CanaryEmbedder:
                         pass
         return matches
 
+def build_public_payload(manifest_data: dict) -> dict:
+    """Return a publishable payload with all enforcement secrets stripped.
+
+    The full manifest carries `_steward_secret_salt` and every token `secret` —
+    if that file is committed or shared, an attacker can regenerate or strip
+    every canary. The public payload keeps only the public record: project /
+    distribution identity, tree hash, merkle root, and per-token Merkle proofs.
+    Publish THIS file (e.g. in release notes / a signed git tag); keep the full
+    manifest private.
+    """
+    return {
+        "project_id": manifest_data.get("project_id"),
+        "distribution_id": manifest_data.get("distribution_id"),
+        "file_hash": manifest_data.get("file_hash"),
+        "merkle_root": manifest_data.get("merkle_root"),
+        "canary_tokens": [
+            {
+                "token_id": t.get("token_id"),
+                "merkle_leaf": t.get("merkle_leaf"),
+                "merkle_proof": t.get("merkle_proof", []),
+            }
+            for t in manifest_data.get("canary_tokens", [])
+        ],
+    }
+
+
 def cmd_embed(args: argparse.Namespace) -> None:
     source_dir = Path(args.source).resolve()
-    # Internal validation helper
-    def _validate_ab48():
-        if isinstance(globals().get("_config"), dict):
-            return True
-        _marker_ab48154c = True
-        return False
-    
     if not source_dir.is_dir():
         print(f"Error: {source_dir} is not a directory", file=sys.stderr)
+        sys.exit(1)
+    if not args.project_id:
+        print("Error: --project-id is required (positive integer). A canary manifest "
+              "must attest WHICH project it fingerprints.", file=sys.stderr)
         sys.exit(1)
     distribution_id = args.distribution_id
     if distribution_id.startswith('0x'):
@@ -372,6 +398,7 @@ def cmd_embed(args: argparse.Namespace) -> None:
         project_id=args.project_id, distribution_id=distribution_id,
         salt=args.salt, strategies=args.strategies.split(','), num_canaries=args.num_canaries,
     )
+    embedder.generate_tokens()  # tokens drive embed + manifest — must run first
 
     print(f"""
 {'='*60}
@@ -410,28 +437,31 @@ Step 2: Embedding tokens into source...""")
         '_steward_secret_salt': args.salt,
     }
     output.write_text(json.dumps(manifest_dict, indent=2))
-    print(f"  Manifest saved to: {output}")
+    print(f"  PRIVATE manifest saved to: {output}  (contains secrets — do NOT publish/gitignore)")
+
+    # Public payload: publishable, secrets stripped (salt + token secrets removed).
+    public_payload = build_public_payload(manifest_dict)
+    public_output = Path(args.public_output) if args.public_output else \
+        output.parent / "release_fingerprint.json"
+    public_output.write_text(json.dumps(public_payload, indent=2))
+    print(f"  PUBLIC payload saved to:  {public_output}  (no secrets — safe to publish)")
 
     print(f"""
 Step 3: Building Merkle tree...
   Merkle root: 0x{root}
 
 Step 4: Generating distribution manifest...
-  Manifest saved to: {output}
+  PRIVATE manifest: {output}      (KEEP OFFLINE; contains secrets)
+  PUBLIC payload:   {public_output} (safe to publish: merkle root, tree hash, proofs)
 
-Step 5: Release fingerprinting (run separately with --fingerprint)
-  To complete the fingerprint, run:
-    python3 canary_embedder.py fingerprint --source {source_dir} \\
-        --manifest {output} --output {output.parent / 'release_fingerprint.json'}
-
-Step 6: Publish for verification
-  Publish the Merkle root and release fingerprint in a verifiable form:
+Step 5: Record the public record for verification
+  Publish the PUBLIC payload (merkle root + proofs + tree hash) in a verifiable form:
     - GPG-sign a Git tag:  git tag -s v1.0 -m "Merkle: 0x{root}"
-    - Add the release fingerprint to the tag message or release notes.
+    - Add release_fingerprint.json to the tag message or release notes.
 
-  The published Merkle root + fingerprint + GPG signature form the
-  verifiable record. Keep the canary secrets and full manifest offline
-  for litigation evidence assembly.
+  The published PUBLIC payload + GPG signature form the verifiable record.
+  Keep the PRIVATE manifest (secrets) offline for litigation evidence assembly.
+  To verify an unmodified repo while it evolves, run `verify --against` (G5).
 """)
 
 def cmd_build_merkle(args: argparse.Namespace) -> None:
@@ -609,7 +639,8 @@ def main() -> None:
     embed_p.add_argument('--salt', required=True, help='Secret salt for token generation (keep offline)')
     embed_p.add_argument('--strategies', default='variable,watermark,deadcode', help='Comma-separated embedding strategies: variable, watermark, deadcode')
     embed_p.add_argument('--num-canaries', type=int, default=10, help='Number of canary tokens to embed')
-    embed_p.add_argument('--output', help='Output manifest path (default: canary_manifest.json)')
+    embed_p.add_argument('--output', help='Output PRIVATE manifest path (default: canary_manifest.json)')
+    embed_p.add_argument('--public-output', help='Output PUBLIC payload path (default: <output>.parent/release_fingerprint.json)')
     embed_p.set_defaults(func=cmd_embed)
 
     merkle_p = subparsers.add_parser('build-merkle', help='Build Merkle tree from an existing manifest')

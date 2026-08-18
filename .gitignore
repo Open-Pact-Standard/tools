@@ -1,3 +1,5 @@
 __pycache__/
 *.pyc
 .coverage
+# OPL canary: private secret-bearing manifest must never be committed
+canary_manifest.json
