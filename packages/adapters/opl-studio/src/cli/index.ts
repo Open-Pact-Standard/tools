@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: OPL-1.4
 // CLI stdout formatter for opl_studio (keep simple; the Studio emits text).
 export function printOplStudioEvent(line: string): void {
   // Paperclip CLI adapters call this per stdout line. Studio output is already

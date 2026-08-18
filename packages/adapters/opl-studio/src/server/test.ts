@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: OPL-1.4
 import type { AdapterEnvironmentTestContext, AdapterEnvironmentTestResult } from "@paperclipai/adapter-utils";
 import { resolveOplStudioCommand } from "../index.js";
 

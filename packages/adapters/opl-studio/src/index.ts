@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: OPL-1.4
 /**
  * OPL Studio adapter for Paperclip.
  *

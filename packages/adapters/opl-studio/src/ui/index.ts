@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: OPL-1.4
 // UI formatter: maps opl_studio stdout/stderr into Paperclip transcript events.
 // OPL Studio is a CLI tool (not an LLM stream), so we treat each emitted line
 // as a stdout/stderr event. No token-stream parsing is needed.

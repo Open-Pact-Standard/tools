@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: OPL-1.4
 // The OPL Studio adapter needs no remote runtime; it shells out to the local
 // opl_studio CLI. This is kept for parity with the other CLI adapters'
 // exported surface (and for the env test hook).

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: OPL-1.4
 """ Enhance opl_check.py 's check_standard_terms_url to validate page content. """
 from pathlib import Path
 
