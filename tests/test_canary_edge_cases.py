@@ -580,6 +580,22 @@ class TestDocGenerateTokensCLIFix:
         assert salt, "auto-generated salt must be persisted in the private manifest"
         assert len(salt) >= 16
 
+    def test_embed_creates_output_dir(self, tmp_path):
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "app.py").write_text("print(1)")
+        # --output into a not-yet-existing subdir is a common maintainer pattern
+        # (.canary/) and previously crashed with a raw FileNotFoundError traceback.
+        out = tmp_path / ".canary" / "m.json"
+        r = run_canary(
+            "embed", "--source", str(tmp_path), "--project-id", "7",
+            "--distribution-id", "d3", "--num-canaries", "2",
+            "--output", str(out),
+        )
+        assert r.returncode == 0
+        assert out.exists(), "embed must create the output file's parent directory"
+        assert (tmp_path / ".canary").is_dir()
+
 
 class TestDriftCheck:
     def _make_repo(self, tmp_path):

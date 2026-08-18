@@ -468,6 +468,10 @@ Step 2: Embedding tokens into source...""")
         'source_files': manifest.source_files,
         '_steward_secret_salt': salt,
     }
+    # Ensure output dirs exist so --output .canary/priv.json just works for a
+    # maintainer who organizes canaries into a folder (reg-catch: previously a
+    # raw FileNotFoundError traceback, not guidance).
+    output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(manifest_dict, indent=2))
     print(f"  PRIVATE manifest saved to: {output}  (contains secrets — do NOT publish/gitignore)")
 
@@ -475,16 +479,16 @@ Step 2: Embedding tokens into source...""")
     public_payload = build_public_payload(manifest_dict)
     public_output = Path(args.public_output) if args.public_output else \
         output.parent / "release_fingerprint.json"
+    public_output.parent.mkdir(parents=True, exist_ok=True)
     public_output.write_text(json.dumps(public_payload, indent=2))
     print(f"  PUBLIC payload saved to:  {public_output}  (no secrets — safe to publish)")
 
     print(f"""
-Step 3: Building Merkle tree...
-  Merkle root: 0x{root}
-
-Step 4: Generating distribution manifest...
-  PRIVATE manifest: {output}      (KEEP OFFLINE; contains secrets)
-  PUBLIC payload:   {public_output} (safe to publish: merkle root, tree hash, proofs)
+------------------------------------------
+Distribution manifest complete.
+  Merkle root:       0x{root}
+  PRIVATE manifest:  {output}      (KEEP OFFLINE; contains secrets)
+  PUBLIC payload:    {public_output} (safe to publish: merkle root, tree hash, proofs)
 
 Step 5: Record the public record for verification
   Publish the PUBLIC payload (merkle root + proofs + tree hash) in a verifiable form:
