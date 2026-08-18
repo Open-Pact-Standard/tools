@@ -1,9 +1,9 @@
 # Open-Pact Standard — Adoption Tools
 
-*Licensed under the [Open-Pact License v1.3.1](LICENSE.md). See [NOTICE](NOTICE) for commercial use terms.*
+*Licensed under the [Open-Pact License v1.4](LICENSE.md). See [NOTICE](NOTICE) for commercial use terms.*
 [![codecov](https://codecov.io/gh/Open-Pact-Standard/tools/graph/badge.svg)](https://codecov.io/gh/Open-Pact-Standard/tools)
 
-Free, open-source tools for adopting the [Open-Pact License (OPL) v1.3.1](https://github.com/Open-Pact-Standard/license).
+Free, open-source tools for adopting the [Open-Pact License (OPL) v1.4](https://github.com/Open-Pact-Standard/license).
 
 These tools help maintainers configure, validate, and manage their OPL-licensed repositories.
 All tools are standalone Python scripts with no external dependencies (standard library only).
@@ -31,7 +31,7 @@ python3 tools/opl_registry_gen.py
 | Tool | Description |
 |------|-------------|
 | [`opl_init.py`](tools/opl_init.py) | **NOTICE Generator** — Interactive CLI that creates a valid NOTICE file with all required fields: maintainer, jurisdiction, Standard Terms URL, OPL-AI opt-in, and more. |
-| [`opl_spdx_inject.py`](tools/opl_spdx_inject.py) | **SPDX Header Injector** — Scans a repository and adds `SPDX-License-Identifier: OPL-1.3.1` to every source file. Supports 60+ languages. Respects shebangs, skips binaries and vendored deps. |
+| [`opl_spdx_inject.py`](tools/opl_spdx_inject.py) | **SPDX Header Injector** — Scans a repository and adds `SPDX-License-Identifier: OPL-1.4` to every source file. Supports 60+ languages. Respects shebangs, skips binaries and vendored deps. |
 | [`opl_check.py`](tools/opl_check.py) | **Compliance Checker** — Validates that your repo is correctly configured: LICENSE.md exists, NOTICE has required fields, Standard Terms URL is reachable and returns HTML, all files have SPDX headers. |
 | [`opl_registry_gen.py`](tools/opl_registry_gen.py) | **Registry Generator** — Creates a `REGISTRY.json` for Tier 1 adopters who want to publish a structured fee schedule so licensees can self-serve. |
 | [`opl_migrate.py`](tools/opl_migrate.py) | **Migration Helper** — For projects switching from MIT, Apache-2.0, GPL, or BSD to OPL. Auto-detects current license, identifies files needing updates, and generates a migration report. |
@@ -169,4 +169,4 @@ jobs:
 ## License
 
 These tools are provided as free examples for the OPL community.
-See the [Open-Pact License v1.3.1](https://github.com/Open-Pact-Standard/license/blob/main/LICENSE.md) for the license text itself.
+See the [Open-Pact License v1.4](https://github.com/Open-Pact-Standard/license/blob/main/LICENSE.md) for the license text itself.
