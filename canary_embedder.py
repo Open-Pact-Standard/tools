@@ -422,6 +422,14 @@ OPL-1.4 Fingerprinting — Distribution Manifest
   Strategies:    {args.strategies}
   Canaries:      {args.num_canaries}
 
+--------------------------------------------------------------------------
+  NOTICE: Embedding DISTRIBUTES tracking tokens across the files in the
+  source tree and MODIFIES them (adds a) comment/reference line or a
+  config-marker variable to N files). This is how canaries are planted so
+  a mis-licensed copy can later be proven. Review the diff before you
+  commit — and remember this tree is now intentionally watermarked.
+--------------------------------------------------------------------------
+
 Step 1: Generating canary tokens...
   Generated {len(embedder.tokens)} tokens
 

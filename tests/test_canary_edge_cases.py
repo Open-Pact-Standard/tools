@@ -555,6 +555,9 @@ class TestDocGenerateTokensCLIFix:
         # manifest carried zero tokens and an empty merkle root.
         assert len(data["canary_tokens"]) == 3
         assert data["merkle_root"]
+        # F5: the embed pre-notice must be shown before modification, so a user
+        # is never surprised that their source files got watermarked.
+        assert "NOTICE: Embedding DISTRIBUTES tracking tokens" in r.stdout
 
 
 class TestDriftCheck:
