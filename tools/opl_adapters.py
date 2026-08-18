@@ -160,12 +160,18 @@ def _assemble_license(p: dict, jur: str) -> str:
 
 def _consequence_text(p: dict) -> str:
     bits = []
-    if p.get("dosp"):
-        bits.append(f"DOSP={p['dosp']}mo: each version's source auto-converts to Apache-2.0 "
-                     f"{p['dosp']} months after release — even if you stay active.")
+    dosp = p.get("dosp") or ""
+    dosp_months = p.get("dosp_months", "36")
+    if dosp in ("months",) or str(dosp).strip().isdigit():
+        n = str(dosp_months or dosp).strip()
+        bits.append(f"DOSP={n}mo: each version's source auto-converts to Apache-2.0 "
+                    f"{n} months after release — even if you stay active.")
+    elif dosp == "forever_frozen":
+        bits.append("DOSP=forever_frozen: no conversion ever — source-available only, NOT Fair Source.")
     else:
         bits.append("DOSP=off: no scheduled conversion; you keep full source-available control.")
-    bits.append(f"Abandonment={p.get('abandonment','36')}mo: silence that long → Apache-2.0 for everyone.")
+    bits.append(f"Abandonment={p.get('abandonment_months', p.get('abandonment', '36'))}mo: "
+                f"silence that long → Apache-2.0 for everyone.")
     if p.get("commercial_model") == "personal_only":
         bits.append("Commercial model=personal_only: all commercial use prohibited.")
     elif p.get("commercial_model") == "free_for_all":
@@ -174,6 +180,103 @@ def _consequence_text(p: dict) -> str:
         bits.append("Commercial model=paid: users must pay per your published Terms URL "
                     "(dead/empty URL → unenforceable).")
     return "  • " + "\n  • ".join(bits)
+
+
+register(Adapter(
+    id="custom-opl",
+    title="Build a Custom OPL",
+    description="Assemble a bespoke OPL variant from 8 vetted slot choices (commercial "
+                "model, DOSP, abandonment, OPL-AI, rate stability, derivative, trademark, "
+                "jurisdiction). Hard-block and Fair Source checks run before you commit. "
+                "Fragments only — never free-form clauses.",
+    params=[
+        Param("out", "Output directory", "text", "custom-opl-out",
+              help="Where LICENSE + NOTICE + VALIDATION.md are written. Never the repo tree."),
+        Param("maintainer", "Maintainer (name <email>)", "text", ""),
+        Param("terms_url", "Standard Terms URL", "text", "",
+              help="HTTPS page publishing your commercial-use pricing."),
+        Param("commercial_model", "Commercial model", "select", "paid_standard_terms",
+              ["paid_standard_terms", "free_for_all", "personal_only"],
+              help="paid = payment required; free = open; personal = non-commercial only."),
+        Param("dosp", "DOSP (scheduled open-sourcing)", "select", "off",
+              ["off", "months", "forever_frozen"],
+              help="off = never; months = convert to Apache-2.0 after N; forever_frozen = never, NOT Fair Source."),
+        Param("dosp_months", "DOSP months", "number", "36"),
+        Param("abandonment", "Abandonment", "select", "convert_apache",
+              ["convert_apache", "freeze_forever", "custom_period"],
+              help="convert_apache = to Apache-2.0 on abandonment; freeze_forever = stays, NOT Fair Source; custom = set your window."),
+        Param("abandonment_months", "Abandonment months", "number", "36"),
+        Param("opl_ai", "OPL-AI addendum", "select", "out", ["out", "in"],
+              help="opt in to restrict AI training."),
+        Param("rate_stability", "Rate stability", "select", "immutable_per_version",
+              ["changeable", "immutable_per_version"],
+              help="changeable = Maintainer may change terms with notice; immutable_per_version = binding per Version."),
+        Param("derivative", "Derivative notice", "select", "light_copyleft",
+              ["light_copyleft", "off"]),
+        Param("trademark", "Trademark", "select", "none", ["none", "asserted"]),
+        Param("jurisdiction_value", "Governing jurisdiction", "text", "United States",
+              help="Any jurisdiction — you write it. OPL §9.4 covers all."),
+        Param("fair_source_label", "Fair Source label", "select", "auto",
+              ["auto", "fair_source", "source_available"],
+              help="auto = derived from fragments; hard-blocks prevent mis-labeling."),
+    ],
+    run=lambda root, p: _custom_opl(p),
+))
+
+
+def _custom_opl(p: dict) -> AdapterResult:
+    """Assemble a Custom OPL variant from all 8 vetted fragment slots via
+    custom_opl.py. Hard-blocks surface as ok=false with a readable message, never
+    a traceback; Fair Source status + the consequence are returned for preview.
+    """
+    out = Path(p.get("out", "custom-opl-out")).expanduser().resolve()
+    # The shared CLI parser defaults --abandonment to "36" (the adopt adapter's
+    # month-style), but the custom-opl slot wants a choice. Normalize a bare
+    # number to a custom window instead of passing it as an invalid choice.
+    ab = p.get("abandonment") or "convert_apache"
+    if ab not in ("convert_apache", "freeze_forever", "custom_period"):
+        ab = "custom_period"
+    tm = p.get("trademark") or "none"
+    if tm not in ("none", "asserted"):
+        tm = "none"
+    dos = p.get("dosp") or "off"
+    if dos not in ("off", "months", "forever_frozen"):
+        dos = "months" if str(dos).strip().isdigit() else "off"
+    args = [
+        "--maintainer", p.get("maintainer", "") or "Unspecified",
+        "--terms-url", p.get("terms_url", ""),
+        "--commercial-model", p.get("commercial_model") or "paid_standard_terms",
+        "--dosp", dos,
+        "--abandonment", ab,
+        "--opl-ai", p.get("opl_ai") or "out",
+        "--rate-stability", p.get("rate_stability") or "immutable_per_version",
+        "--derivative", p.get("derivative") or "light_copyleft",
+        "--trademark", tm,
+        "--jurisdiction", "free_text",
+        "--jurisdiction-value", p.get("jurisdiction_value", "United States"),
+        "--dosp-months", str(p.get("dosp_months", "36")),
+        "--abandonment-months", str(p.get("abandonment_months", "36")),
+        "--fair-source-label", p.get("fair_source_label", "auto"),
+        "--out", str(out),
+    ]
+    rc, so, se = run_tool("custom-opl/custom_opl.py", *args)
+    if rc != 0:
+        # custom_opl.main() exits non-zero with the hard-block reason on stdout/stderr.
+        reason = (so or se or "").strip()
+        return AdapterResult(False, {}, [reason or "Custom OPL assembly failed (hard block or error)."])
+    _read = lambda name: (out / name).read_text() if (out / name).exists() else ""
+    lis = _read("LICENSE")
+    notice = _read("NOTICE")
+    validation = _read("VALIDATION.md")
+    # Fair Source status comes from the LICENSE Provenance Block (custom_opl writes
+    # "Fair Source eligible: False/True" there) — reliable, not stdout-grep dependent.
+    fs = "fair source eligible: false" not in lis.lower()
+    cons = _consequence_text(p) + (
+        "\n  • Fair Source: YES" if fs else "\n  • Fair Source: NO (source-available only).")
+    outputs = {k: v for k, v in {"LICENSE": lis, "NOTICE": notice,
+                                 "VALIDATION.md": validation}.items() if v}
+    return AdapterResult(True, outputs,
+                         [f"Custom OPL variant written to {out}/"], cons)
 
 
 register(Adapter(
@@ -439,6 +542,12 @@ def _cli_argv_params(argv: list[str]) -> tuple[str, dict]:
     p.add_argument("--dosp", default="")
     p.add_argument("--derivative", default="light_copyleft")
     p.add_argument("--trademark", default="")
+    p.add_argument("--rate-stability", default="immutable_per_version", dest="rate_stability")
+    p.add_argument("--jurisdiction-value", default="United States", dest="jurisdiction_value")
+    p.add_argument("--dosp-months", default="36", dest="dosp_months")
+    p.add_argument("--abandonment-months", default="36", dest="abandonment_months")
+    p.add_argument("--fair-source-label", default="auto", dest="fair_source_label")
+    p.add_argument("--out", default="custom-opl-out")
     p.add_argument("--confirm", default="false", help="true/false — write into repo.")
     p.add_argument("--mode", default="report", help="scan output mode: report | diff.")
     p.add_argument("--skip_remote", default="false", help="skip remote URL check (offline).")
@@ -456,6 +565,12 @@ def _cli_argv_params(argv: list[str]) -> tuple[str, dict]:
         "dosp": args.dosp,
         "derivative": args.derivative,
         "trademark": args.trademark,
+        "rate_stability": args.rate_stability,
+        "jurisdiction_value": args.jurisdiction_value,
+        "dosp_months": args.dosp_months,
+        "abandonment_months": args.abandonment_months,
+        "fair_source_label": args.fair_source_label,
+        "out": args.out,
         "confirm": args.confirm,
         "mode": args.mode,
         "skip_remote": args.skip_remote,

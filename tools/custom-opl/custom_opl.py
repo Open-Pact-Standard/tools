@@ -17,7 +17,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-FRAGMENTS = json.loads((HERE / "fragments.json").read_text(encoding="utf-8"))
+
+
+def _load_fragments() -> dict:
+    """Load fragments.json. The file may carry an SPDX `//` header line (JSON has
+    no comments), so strip leading comment lines before parsing."""
+    raw = (HERE / "fragments.json").read_text(encoding="utf-8")
+    # Drop any full-line `// ...` or `/* ... */` comment headers.
+    lines = [ln for ln in raw.splitlines() if not ln.lstrip().startswith("//")]
+    return json.loads("\n".join(lines))
+
+
+FRAGMENTS = _load_fragments()
 BASE_LICENSE = (HERE.parent.parent / ".." / "open-pact-license" / "LICENSE.md").resolve()
 # Fallback: look for the license text alongside if not found above.
 if not BASE_LICENSE.exists():

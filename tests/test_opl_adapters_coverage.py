@@ -290,6 +290,57 @@ class TestMainBlock:
         assert "[FAIL] adapter scan" in out2
 
 
+class TestCustomOpl:
+    def test_adapter_registered(self):
+        ids = [a["id"] for a in adapters.catalogue()]
+        assert "custom-opl" in ids
+
+    def test_builds_variant(self, tmp_path):
+        out = tmp_path / "out"
+        res = adapters.run_adapter("custom-opl", None, {
+            "out": str(out), "maintainer": "Acme <ops@acme.com>",
+            "terms_url": "https://acme.com/terms", "dosp": "months",
+            "dosp_months": "24", "commercial_model": "paid_standard_terms",
+        })
+        assert res.ok is True
+        assert "LICENSE" in res.outputs
+        assert "NOTICE" in res.outputs
+        assert "OPL Version" in res.outputs["NOTICE"]
+        assert "Customization Schedule" in res.outputs["LICENSE"]
+        assert "Fair Source: YES" in res.consequence
+        assert (out / "LICENSE").exists()
+
+    def test_default_slot_values(self, tmp_path):
+        # Empty params (shared-CLI defaults leak "" / "36") must still assemble.
+        res = adapters.run_adapter("custom-opl", None, {"out": str(tmp_path / "o")})
+        assert res.ok is True
+        assert "LICENSE" in res.outputs
+
+    def test_hard_block_surfaces_as_failure(self, tmp_path):
+        res = adapters.run_adapter("custom-opl", None, {
+            "out": str(tmp_path / "o"), "dosp": "forever_frozen",
+            "fair_source_label": "fair_source",
+        })
+        assert res.ok is False
+        assert any("HARD BLOCK" in m for m in res.messages)
+
+    def test_forever_frozen_is_source_available(self, tmp_path):
+        res = adapters.run_adapter("custom-opl", None, {
+            "out": str(tmp_path / "o"), "dosp": "forever_frozen",
+        })
+        assert res.ok is True
+        assert "Fair Source: NO" in res.consequence
+
+    def test_abandonment_free_text_normalized(self, tmp_path):
+        # Shared parser passes abandonment="36"; must normalize to a valid choice.
+        res = adapters.run_adapter("custom-opl", None, {
+            "out": str(tmp_path / "o"), "abandonment": "36",
+            "abandonment_months": "48",
+        })
+        assert res.ok is True
+        assert "Abandonment=48mo" in res.consequence
+
+
 class TestDataclasses:
     def test_adapter_result_defaults(self):
         r = adapters.AdapterResult(True)

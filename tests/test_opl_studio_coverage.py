@@ -134,6 +134,36 @@ def test_do_post_api_adapter_scan_report():
     assert "outputs" in data
 
 
+def test_do_post_api_adapter_custom_opl(tmp_path):
+    payload = json.dumps({
+        "id": "custom-opl", "params": {
+            "out": str(tmp_path / "out"),
+            "maintainer": "Acme <ops@acme.com>",
+            "terms_url": "https://acme.com/terms",
+        }
+    }).encode()
+    h = _handler("/api/adapter", "POST", payload)
+    studio.Handler.do_POST(h)
+    assert h._resp_code == 200
+    data = json.loads(h.read_body())
+    assert data["ok"] is True
+    assert "LICENSE" in data["outputs"]
+
+
+def test_do_post_api_adapter_custom_opl_hard_block(tmp_path):
+    payload = json.dumps({
+        "id": "custom-opl", "params": {
+            "out": str(tmp_path / "out"),
+            "dosp": "forever_frozen", "fair_source_label": "fair_source",
+        }
+    }).encode()
+    h = _handler("/api/adapter", "POST", payload)
+    studio.Handler.do_POST(h)
+    data = json.loads(h.read_body())
+    assert data["ok"] is False
+    assert any("HARD BLOCK" in m for m in data["messages"])
+
+
 def test_do_post_api_adapter_bad_json():
     h = _handler("/api/adapter", "POST", b"{not json")
     studio.Handler.do_POST(h)

@@ -20,6 +20,10 @@ Stop with `Ctrl-C`.
 - **Adopt** — fill a short form (maintainer, jurisdiction, terms URL, DOSP,
   abandonment). Every choice shows its *consequence* before you commit. It
   previews the NOTICE/LICENSE diff, and only writes to your repo when you confirm.
+- **Build a Custom OPL** — assemble a bespoke OPL variant from **8 vetted
+  fragment slots** (commercial model, DOSP, abandonment, OPL-AI, rate stability,
+  derivative, trademark, jurisdiction). Hard-block and **Fair Source** checks run
+  live as you choose; output lands in a `custom-opl-out/` dir you own.
 - **Scan** — point at any repo and run `opl_check` read-only to see if it's
   OPL-compliant.
 - **Kit** — read the Adoption Kit docs and download them as a zip.

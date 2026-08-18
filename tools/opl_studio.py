@@ -114,6 +114,9 @@ function openCap(id){{
   let live = (id==='adopt') ? `<div class="conseq" id="conseq"></div>
      <div class="row"><div><h2>NOTICE (preview)</h2><pre id="out-notice"></pre></div>
      <div><h2>LICENSE (Custom OPL, preview)</h2><pre id="out-license"></pre></div></div>`
+     : (id==='custom-opl') ? `<div class="conseq" id="conseq"></div>
+        <div><h2>LICENSE (Custom OPL, preview)</h2><pre id="out-license"></pre></div>
+        <div><h2>NOTICE</h2><pre id="out-notice"></pre></div>`
      : (id==='scan') ? `<pre id="out"></pre><div id="diff" class="diff hidden"></div>
         <button id="applyBtn" class="hidden" onclick="applyDiff()">Apply — adopt OPL</button>` : `<pre id="out"></pre>`;
   document.getElementById('panel').className='';
@@ -121,7 +124,7 @@ function openCap(id){{
      ${{fields}}
      <button onclick="runCap('${{id}}')">Run</button>
      <button class="sec" onclick="document.getElementById('panel').className='hidden'">Close</button></div>${{live}}`;
-  if(id==='adopt') document.querySelectorAll('#panel input,#panel select').forEach(e=>e.addEventListener('input',()=>previewAdopt('${{id}}')));
+  if(id==='adopt'||id==='custom-opl') document.querySelectorAll('#panel input,#panel select').forEach(e=>e.addEventListener('input',()=>previewAdopt('${{id}}')));
 }}
 function collect(id){{
   const a=CAT.find(x=>x.id===id); const f={{}};
@@ -155,14 +158,17 @@ function previewAdopt(id){{
   fetch('/api/adapter',{{method:'POST',headers:{{'Content-Type':'application/json'}},
     body:JSON.stringify({{id, params:f}})}}).then(r=>r.json()).then(d=>{{
     if(d.outputs){{ if(d.outputs.NOTICE)document.getElementById('out-notice').textContent=d.outputs.NOTICE;
-      if(d.outputs['LICENSE (Custom OPL)'])document.getElementById('out-license').textContent=d.outputs['LICENSE (Custom OPL)']; }}
-    if(d.consequence)document.getElementById('conseq').textContent=d.consequence;
+      if(d.outputs['LICENSE (Custom OPL)'])document.getElementById('out-license').textContent=d.outputs['LICENSE (Custom OPL)'];
+      if(d.outputs.LICENSE)document.getElementById('out-license').textContent=d.outputs.LICENSE; }}
+    var c=document.getElementById('conseq');
+    if(c){{ c.textContent=(d.consequence||'')+(d.messages&&d.messages.length?('\\n'+d.messages.join('\\n')):''); }}
   }});
 }}
 function renderAdopt(d){{
   if(d.outputs){{ if(d.outputs.NOTICE)document.getElementById('out-notice').textContent=d.outputs.NOTICE;
-    if(d.outputs['LICENSE (Custom OPL)'])document.getElementById('out-license').textContent=d.outputs['LICENSE (Custom OPL)']; }}
-  if(d.consequence)document.getElementById('conseq').textContent=d.consequence;
+    if(d.outputs['LICENSE (Custom OPL)'])document.getElementById('out-license').textContent=d.outputs['LICENSE (Custom OPL)'];
+    if(d.outputs.LICENSE)document.getElementById('out-license').textContent=d.outputs.LICENSE; }}
+  if(d.consequence){{ var c=document.getElementById('conseq'); if(c) c.textContent=d.consequence; }}
 }}
 function applyDiff(){{
   const f=collect('scan');
