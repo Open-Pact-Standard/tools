@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import random
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -422,6 +423,61 @@ class TestCanaryCLIEdgeCases:
         assert out.exists()
         data = json.loads(out.read_text())
         assert data["project_id"] == 1
+
+    def test_hunt_missing_manifest(self):
+        r = run_canary("hunt", "--manifest", "/nonexistent/manifest.json")
+        assert r.returncode != 0
+        assert "not found" in r.stderr
+
+    def test_hunt_no_tokens_clear_error(self, tmp_path):
+        # a manifest with no searchable token literals (e.g. an empty/public one)
+        m = tmp_path / "m.json"
+        m.write_text(json.dumps({"canary_tokens": []}))
+        r = run_canary("hunt", "--manifest", str(m))
+        assert r.returncode != 0
+        assert "no searchable token literals" in r.stderr
+
+    def test_hunt_works_and_prints_blind_spots(self, tmp_path):
+        """hunt must run against a private manifest and, with no copies present,
+        say so honestly AND print its coverage blind spots (never 'no theft')."""
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "a.py").write_text("def f(): return 1\n")
+        priv = tmp_path / "priv.json"
+        pub = tmp_path / "pub.json"
+        r = run_canary("embed", "--source", str(tmp_path), "--project-id", "1",
+                       "--distribution-id", "v1", "--num-canaries", "1",
+                       "--output", str(priv), "--public-output", str(pub))
+        assert r.returncode == 0
+        r = run_canary("hunt", "--manifest", str(priv))
+        assert r.returncode == 0
+        combined = r.stdout + r.stderr
+        assert "BLIND SPOTS" in combined, "no-match must not claim safety"
+        assert "public GitHub" in combined
+
+    def test_evidence_verbatim_copy_merkle_proven(self, tmp_path):
+        """LP#8 gate: a true verbatim copy (same path) is merkle_proven; a
+        renamed file is a lead (merkle_proven False), not proof."""
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "core.py").write_text("def init(): return 1\n")
+        priv = tmp_path / "priv.json"
+        r = run_canary("embed", "--source", str(tmp_path), "--project-id", "9",
+                       "--distribution-id", "ev", "--num-canaries", "2",
+                       "--output", str(priv), "--public-output", str(tmp_path / "pub.json"))
+        assert r.returncode == 0
+
+        # verbatim copy, same relative path
+        vsrc = tmp_path / "victim_src"
+        (vsrc / "src").mkdir(parents=True)
+        shutil.copy2(tmp_path / "src" / "core.py", vsrc / "src" / "core.py")
+        ev = tmp_path / "ev_verb.json"
+        r = run_canary("evidence", "--manifest", str(priv), "--suspect-source", str(vsrc),
+                       "--output", str(ev))
+        assert r.returncode == 0
+        d = json.loads(ev.read_text())
+        assert d["gate"] == "merkle-proof"
+        assert all(m["merkle_proven"] for m in d["matches"])
 
 
 # ---------------------------------------------------------------------------

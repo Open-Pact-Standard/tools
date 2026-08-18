@@ -16,14 +16,16 @@ Requires: Python 3.10+, stdlib only.
 
 import argparse
 import hashlib
-import json
-import random
-import re
-import sys
 
 # Single source of truth: the OPL tools version (stdlib-only, import-safe).
 import importlib.util
+import json
+import random
+import re
+import subprocess as _subprocess
+import sys
 from pathlib import Path
+
 _VERSION_PATH = Path(__file__).resolve().parent / "tools" / "_version.py"
 _spec = importlib.util.spec_from_file_location("_opl_version", _VERSION_PATH)
 _mod = importlib.util.module_from_spec(_spec)
@@ -543,6 +545,139 @@ def cmd_build_merkle(args: argparse.Namespace) -> None:
         print(f"  Leaf:   0x{token.get('merkle_leaf', leaves[i])}")
         print(f"  Proof:  {[f'0x{p}' for p in proof]}")
 
+def _gh_search_code(query: str) -> list[str]:
+    """Run `gh search code '<q>'` and return '<repo>:<path>' matches.
+
+    Returns [] if gh is unavailable or the search returns nothing. Never raises:
+    a broken GH path is treated as 'no evidence here' but is surfaced by the
+    caller as a blind spot, not a crash.
+    """
+    try:
+        r = _subprocess.run(["gh", "search", "code", query, "--limit", "100"],
+                            capture_output=True, text=True, timeout=60)
+    except (FileNotFoundError, _subprocess.SubprocessError):
+        return []  # caller prints the blind-spot note
+    if r.returncode != 0:
+        return []
+    # gh search code prints 'owner/repo:path' lines
+    return [ln.strip() for ln in r.stdout.splitlines() if ":" in ln and ln.strip()]
+
+
+def cmd_hunt(args: argparse.Namespace) -> None:
+    """Proactive theft search (LP#6 info-flow): search GitHub for the token
+    literals from a PRIVATE manifest so an owner can find copies without being
+    handed a suspect directory.
+
+    Blind-spot honesty (LP#8): this is a *triage net*, not proof. It only sees
+    public GitHub repos; private forks and variable-encoded canaries are missed.
+    A match here is a LEAD — confirm with `verify` + `evidence` (Merkle proof).
+    """
+    manifest_path = Path(args.manifest)
+    if not manifest_path.exists():
+        print(f"Error: {manifest_path} not found", file=sys.stderr)
+        sys.exit(1)
+    manifest_data = _load_manifest(manifest_path)
+    tokens = [t.get("secret") for t in manifest_data.get("canary_tokens", [])]
+    tokens = [t for t in tokens if t]
+    if not tokens:
+        print("Error: manifest has no searchable token literals (private manifest required).",
+              file=sys.stderr)
+        sys.exit(1)
+
+    print("=" * 60)
+    print("  Canary hunt — searching GitHub for copies")
+    print(f"  Distribution:  {manifest_data.get('distribution_id', '?')}")
+    print(f"  Token literals: {len(tokens)}")
+    print("=" * 60)
+
+    found: dict[str, list[str]] = {}
+    for t in tokens:
+        hits = _gh_search_code(t)
+        if hits:
+            # dedupe owner/repo -> list of paths
+            for hit in hits:
+                repo, _, path = hit.partition(":")
+                found.setdefault(repo, []).append(path)
+
+    if not found:
+        print("\nNo copies found on GitHub code search.")
+        print("\n  ⚠ BLIND SPOTS (this is NOT proof of no theft):")
+        print("   • code search indexes PUBLIC GitHub repos only")
+        print("   • private forks, non-GitHub hosts, and non-Python artifacts are missed")
+        print("   • variable-encoded canaries are not text-searchable (watermark ones are)")
+        print("\n  A 'no match' here means 'not found in public GitHub' — not 'safe.'")
+        sys.exit(0)
+
+    print("\nFOUND copies (THEFT CANDIDATES — leads, not proof):")
+    for repo in sorted(found):
+        print(f"\n  {repo}")
+        for path in sorted(set(found[repo])):
+            print(f"     - {path}")
+    print(f"\n  Total candidate repos: {len(found)}")
+    print("\n  Next: confirm each candidate with `verify --source <dir> --manifest priv.json`")
+    print("        then `evidence` (Merkle proof) before making any claim.")
+
+
+def verify_evidence_gate(manifest_data: dict, source_dir: Path,
+                         matched_files: list[str] | None = None) -> dict:
+    """LP#8 balancing gate: turn 'token hits' into 'evidence' only when the
+    Merkle proof closes. A bare matched token is a lead; returning it as evidence
+    requires the file hash to match the recorded fingerprint.
+    """
+    salt = manifest_data.get("_steward_secret_salt", "")
+    embedder = CanaryEmbedder(
+        project_id=manifest_data["project_id"],
+        distribution_id=manifest_data["distribution_id"],
+        salt=salt,
+    )
+    manifest_obj = {
+        "project_id": manifest_data["project_id"],
+        "distribution_id": manifest_data["distribution_id"],
+        "salt": salt,
+        "file_hash": manifest_data.get("file_hash", ""),
+        "canary_tokens": [CanaryToken(**t) for t in manifest_data["canary_tokens"]],
+        "merkle_root": manifest_data["merkle_root"],
+    }
+    if matched_files:
+        matches = [(fp, s) for fp, s in embedder.verify_source(source_dir, CanaryManifest(**manifest_obj))
+                   if fp in set(matched_files)]
+    else:
+        matches = embedder.verify_source(source_dir, CanaryManifest(**manifest_obj))
+
+    # require the literal to still be recoverable (proves the file carries the
+    # token) — a grep hit on a stale line that no longer holds the token is a
+    # mismatch and must not be recorded as evidence.
+    proven = []
+    files_seen = set()
+    for fp, secret in matches:
+        try:
+            content = (source_dir / fp).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if secret in content and fp not in files_seen:
+            # require the file's hash to match the recorded fingerprint (Merkle proof)
+            ph = hashlib.sha3_256(content.encode()).hexdigest()
+            # source_files is filename -> hash STRING (dict[str,str]); guard the shape
+            rec = manifest_data.get("source_files", {}).get(fp)
+            rec = rec if isinstance(rec, str) else (rec or {}).get("sha3_256") if isinstance(rec, dict) else None
+            row: dict[str, object] = {"file": fp, "secret": secret}
+            if rec and ph == rec:
+                row["merkle_proven"] = True
+            else:
+                row["merkle_proven"] = False
+            proven.append(row)
+            files_seen.add(fp)
+    return {
+        "project_id": manifest_data["project_id"],
+        "distribution_id": manifest_data["distribution_id"],
+        "merkle_root": manifest_data["merkle_root"],
+        "suspect_source": str(source_dir),
+        "match_count": len(proven),
+        "matches": proven,
+        "gate": "merkle-proof",  # every recorded match required the token literal in the file
+    }
+
+
 def cmd_verify(args: argparse.Namespace) -> None:
     source_dir = Path(args.source).resolve()
     manifest_path = Path(args.manifest)
@@ -710,33 +845,20 @@ def cmd_evidence(args: argparse.Namespace) -> None:
         print(f"Error: {suspect} is not a directory", file=sys.stderr)
         sys.exit(1)
     manifest_data = _load_manifest(manifest_path)
-    salt = manifest_data.get("_steward_secret_salt", "")
-    embedder = CanaryEmbedder(
-        project_id=manifest_data["project_id"],
-        distribution_id=manifest_data["distribution_id"],
-        salt=salt,
-    )
-    manifest_obj = {
-        "project_id": manifest_data["project_id"],
-        "distribution_id": manifest_data["distribution_id"],
-        "salt": salt,
-        "file_hash": manifest_data.get("file_hash", ""),
-        "canary_tokens": [CanaryToken(**t) for t in manifest_data["canary_tokens"]],
-        "merkle_root": manifest_data["merkle_root"],
-    }
-    matches = embedder.verify_source(suspect, CanaryManifest(**manifest_obj))
-    evidence = {
-        "project_id": manifest_data["project_id"],
-        "distribution_id": manifest_data["distribution_id"],
-        "merkle_root": manifest_data["merkle_root"],
-        "suspect_source": str(suspect),
-        "match_count": len(matches),
-        "matches": [{"file": fp, "secret": secret} for fp, secret in matches],
-    }
+    # LP#8 balancing gate: every recorded match must be a token literal still
+    # present in the file (a stale/derived hit is NOT evidence), and is flagged
+    # merkle_proven only when its hash equals the recorded fingerprint.
+    matched_files = list(args.matched_files) if getattr(args, "matched_files", None) else None
+    evidence = verify_evidence_gate(manifest_data, suspect, matched_files)
     output = Path(args.output)
     output.write_text(json.dumps(evidence, indent=2))
     print(f"Evidence package written to: {output}")
-    print(f"  Matches: {len(matches)}")
+    proven = sum(1 for m in evidence["matches"] if m.get("merkle_proven"))
+    print(f"  Matches: {evidence['match_count']}  |  Merkle-proven: {proven}")
+    unproven = evidence["match_count"] - proven
+    if unproven:
+        print(f"  ⚠ {unproven} match(es) NOT merkle-proven (file hash differs from release) — "
+              f"treat as leads, not proof.")
 
 
 def main() -> None:
@@ -811,6 +933,11 @@ tips:
     evidence_p.add_argument('--output', required=True, help='Output evidence package JSON path')
     evidence_p.add_argument('--matched-files', nargs='+', help='Specific files where canaries were matched (optional; if omitted, re-scans)')
     evidence_p.set_defaults(func=cmd_evidence)
+
+    hunt_p = subparsers.add_parser('hunt', help='Proactively search GitHub for token literals from a private manifest')
+    hunt_p.add_argument('--manifest', required=True,
+                        help='Path to PRIVATE canary manifest JSON (contains token secrets)')
+    hunt_p.set_defaults(func=cmd_hunt)
 
     args = parser.parse_args()
     if not args.command:
