@@ -544,3 +544,107 @@ class TestDocGenerateTokensCLIFix:
         # manifest carried zero tokens and an empty merkle root.
         assert len(data["canary_tokens"]) == 3
         assert data["merkle_root"]
+
+
+class TestDriftCheck:
+    def _make_repo(self, tmp_path):
+        src = tmp_path / "src"; src.mkdir()
+        (src / "app.py").write_text("def hello():\n    print('hi')\n")
+        (src / "mod.py").write_text("x = 1\n")
+        return src
+
+    def _embed(self, tmp_path, src):
+        priv = tmp_path / "priv.json"
+        pub = tmp_path / "pub.json"
+        r = run_canary(
+            "embed", "--source", str(src), "--project-id", "7",
+            "--distribution-id", "rel1", "--salt", "s", "--num-canaries", "3",
+            "--output", str(priv), "--public-output", str(pub),
+        )
+        assert r.returncode == 0
+        return pub
+
+    def test_no_drift_exits_zero(self, tmp_path):
+        src = self._make_repo(tmp_path)
+        pub = self._embed(tmp_path, src)
+        r = run_canary("check", "--source", str(src), "--manifest", str(pub))
+        assert r.returncode == 0
+        assert "No drift" in r.stdout
+
+    def test_drift_detected_on_update(self, tmp_path):
+        src = self._make_repo(tmp_path)
+        pub = self._embed(tmp_path, src)
+        (src / "app.py").write_text("def hello():\n    print('changed')\n")
+        (src / "new.py").write_text("y = 2\n")
+        r = run_canary("check", "--source", str(src), "--manifest", str(pub))
+        assert r.returncode == 1
+        assert "MODIFIED: app.py" in r.stdout
+        assert "ADDED: new.py" in r.stdout
+        assert "DRIFT" in r.stdout
+
+    def test_allow_drift_exits_zero(self, tmp_path):
+        src = self._make_repo(tmp_path)
+        pub = self._embed(tmp_path, src)
+        (src / "app.py").write_text("changed\n")
+        r = run_canary("check", "--allow-drift", "--source", str(src), "--manifest", str(pub))
+        assert r.returncode == 0
+
+    def test_missing_manifest_fails(self, tmp_path):
+        src = self._make_repo(tmp_path)
+        r = run_canary("check", "--source", str(src), "--manifest", str(tmp_path / "nope.json"))
+        assert r.returncode != 0
+
+    def test_missing_source_fails(self, tmp_path):
+        pub = tmp_path / "pub.json"
+        pub.write_text("{}")
+        r = run_canary("check", "--source", str(tmp_path / "nope"), "--manifest", str(pub))
+        assert r.returncode != 0
+
+
+class TestCanaryCheckScript:
+    def _make_repo(self, tmp_path):
+        src = tmp_path / "src"; src.mkdir()
+        (src / "app.py").write_text("def hello():\n    print('hi')\n")
+        return src
+
+    def test_ci_hook_passes_on_match(self, tmp_path):
+        src = self._make_repo(tmp_path)
+        pkg = str(Path(TOOLS_DIR) / "canary_check.py")
+        pub = tmp_path / "canary_release.json"
+        r = run_canary(
+            "embed", "--source", str(src), "--project-id", "1",
+            "--distribution-id", "d", "--salt", "s", "--num-canaries", "1",
+            "--output", str(tmp_path / "p.json"), "--public-output", str(pub),
+        )
+        assert r.returncode == 0
+        proc = subprocess.run(
+            [sys.executable, pkg, "--repo", str(src), "--payload", str(pub)],
+            capture_output=True, text=True,
+        )
+        assert proc.returncode == 0
+
+    def test_ci_hook_fails_on_drift(self, tmp_path):
+        src = self._make_repo(tmp_path)
+        pkg = str(Path(TOOLS_DIR) / "canary_check.py")
+        pub = tmp_path / "canary_release.json"
+        r = run_canary(
+            "embed", "--source", str(src), "--project-id", "1",
+            "--distribution-id", "d", "--salt", "s", "--num-canaries", "1",
+            "--output", str(tmp_path / "p.json"), "--public-output", str(pub),
+        )
+        assert r.returncode == 0
+        (src / "app.py").write_text("changed\n")
+        proc = subprocess.run(
+            [sys.executable, pkg, "--repo", str(src), "--payload", str(pub)],
+            capture_output=True, text=True,
+        )
+        assert proc.returncode == 1
+
+    def test_missing_payload_fails(self, tmp_path):
+        src = self._make_repo(tmp_path)
+        proc = subprocess.run(
+            [sys.executable, str(Path(TOOLS_DIR) / "canary_check.py"),
+             "--repo", str(src), "--payload", str(tmp_path / "nope.json")],
+            capture_output=True, text=True,
+        )
+        assert proc.returncode == 1

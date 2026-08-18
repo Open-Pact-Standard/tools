@@ -43,7 +43,7 @@ EXCLUDED_DIRS = frozenset({
 # The tool must never inject canaries into its own source or artifacts,
 # otherwise dogfooding silently corrupts the enforcement tooling itself.
 SELF_EXCLUDED_FILENAMES = frozenset({
-    'canary_embedder.py', 'js_embedder.py', 'cicd_pipeline.py',
+    'canary_embedder.py', 'canary_check.py', 'js_embedder.py', 'cicd_pipeline.py',
     'canary_manifest.json', 'release_fingerprint.json',
 })
 
@@ -67,6 +67,10 @@ class CanaryManifest:
     file_hash: str = ""
     canary_tokens: List[CanaryToken] = field(default_factory=list)
     merkle_root: str = ""
+    # Per-file sha3-256 {relative_path: hash} for the tree at fingerprint time.
+    # Lets `verify --against` report exactly WHICH files changed as the repo
+    # evolves (the "when a repo updates too" requirement).
+    source_files: Dict[str, str] = field(default_factory=dict)
 
 class TokenGenerator:
     @staticmethod
@@ -325,20 +329,29 @@ class CanaryEmbedder:
         return self.tree_root
 
     def generate_manifest(self, source_dir: Path) -> CanaryManifest:
-        tree_hash = self._hash_tree(source_dir)
+        tree_hash, source_files = self._hash_tree(source_dir)
         return CanaryManifest(
             project_id=self.project_id, distribution_id=self.distribution_id,
-            salt=self.salt, file_hash=tree_hash, 
+            salt=self.salt, file_hash=tree_hash,
             canary_tokens=list(self.tokens), merkle_root=self.tree_root,
+            source_files=source_files,
         )
 
-    def _hash_tree(self, source_dir: Path) -> str:
+    def _hash_tree(self, source_dir: Path) -> Tuple[str, Dict[str, str]]:
         h = hashlib.sha3_256()
+        files: Dict[str, str] = {}
         for f in sorted(source_dir.rglob('*')):
             if f.is_file() and f.suffix in SUPPORTED_EXTENSIONS:
-                h.update(f.name.encode())
+                rel = f.relative_to(source_dir).as_posix()
+                fh = hashlib.sha3_256(f.read_bytes()).hexdigest()
+                files[rel] = fh
+                h.update(rel.encode())
                 h.update(f.read_bytes())
-        return h.hexdigest()
+        return h.hexdigest(), files
+
+    def hash_current_tree(self, source_dir: Path) -> Tuple[str, Dict[str, str]]:
+        """Hash the current tree for drift comparison against a recorded manifest."""
+        return self._hash_tree(source_dir)
 
     def verify_source(self, source_dir: Path, manifest: CanaryManifest) -> List[Tuple[str, str]]:
         matches = []
@@ -370,6 +383,7 @@ def build_public_payload(manifest_data: dict) -> dict:
         "distribution_id": manifest_data.get("distribution_id"),
         "file_hash": manifest_data.get("file_hash"),
         "merkle_root": manifest_data.get("merkle_root"),
+        "source_files": manifest_data.get("source_files", {}),
         "canary_tokens": [
             {
                 "token_id": t.get("token_id"),
@@ -434,6 +448,7 @@ Step 2: Embedding tokens into source...""")
         'project_id': manifest.project_id, 'distribution_id': manifest.distribution_id,
         'file_hash': manifest.file_hash, 'merkle_root': manifest.merkle_root,
         'canary_tokens': [asdict(t) for t in manifest.canary_tokens],
+        'source_files': manifest.source_files,
         '_steward_secret_salt': args.salt,
     }
     output.write_text(json.dumps(manifest_dict, indent=2))
@@ -545,6 +560,68 @@ metadata, and a human-readable summary suitable for legal use.
         print("\\nNo canary tokens found.\\n")
     print()
 
+def cmd_check(args: argparse.Namespace) -> None:
+    """Drift check (Phase C): hash the CURRENT tree and compare against a
+    recorded manifest's per-file hashes. Exit 0 = repo still matches the
+    fingerprint; exit 1 = files added/modified/removed since fingerprint time.
+
+    This is the automatic balancing loop that lets a repo 'stay verifiable as it
+    updates': CI runs it on every commit and fails red on unexpected drift.
+    Works against either the private manifest or the public payload.
+    """
+    source_dir = Path(args.source).resolve()
+    manifest_path = Path(args.manifest)
+    if not source_dir.is_dir():
+        print(f"Error: {source_dir} is not a directory", file=sys.stderr)
+        sys.exit(1)
+    if not manifest_path.exists():
+        print(f"Error: {manifest_path} not found", file=sys.stderr)
+        sys.exit(1)
+    with open(manifest_path) as f:
+        manifest_data = json.load(f)
+    recorded_files = manifest_data.get('source_files', {})
+    if not recorded_files:
+        print("Error: manifest has no 'source_files' record (generated before "
+              "per-file hashing; re-run embed against this tree).", file=sys.stderr)
+        sys.exit(1)
+
+    embedder = CanaryEmbedder(
+        project_id=manifest_data.get('project_id', 0),
+        distribution_id=manifest_data.get('distribution_id', ''),
+        salt=manifest_data.get('_steward_secret_salt', ''),
+    )
+    current_hash, current_files = embedder.hash_current_tree(source_dir)
+
+    modified = sorted(p for p, h in recorded_files.items()
+                      if p in current_files and current_files[p] != h)
+    removed = sorted(p for p in recorded_files if p not in current_files)
+    added = sorted(p for p in current_files if p not in recorded_files)
+    unchanged = len(recorded_files) - len(modified) - len(removed)
+
+    print(f"""
+OPL-1.4 Drift check
+{'='*60}
+  Source:     {source_dir}
+  Manifest:   {manifest_path}
+  Recorded:   {len(recorded_files)} files
+  Current:    {len(current_files)} files (tree hash 0x{current_hash[:16]}...)
+  Unchanged:  {unchanged}  Modified: {len(modified)}  Removed: {len(removed)}  Added: {len(added)}
+""")
+    for label, items in (("MODIFIED", modified), ("REMOVED", removed), ("ADDED", added)):
+        for p in items:
+            print(f"  {label}: {p}")
+
+    drift = bool(modified or removed or added)
+    if drift:
+        print(f"\nDRIFT DETECTED: the repo no longer matches the recorded fingerprint "
+              f"at {manifest_path.name}. Run `embed` to re-fingerprint if this is an "
+              f"intentional release, or reconcile if it is unauthorized change.")
+        if not args.allow_drift:
+            sys.exit(1)
+    else:
+        print(f"\nOK: repo matches the recorded fingerprint. No drift.")
+
+
 def _hash_source(source_dir: Path, archive: bool) -> str:
     """Hash a source tree (or archive) deterministically into a single digest."""
     h = hashlib.sha3_256()
@@ -651,6 +728,12 @@ def main() -> None:
     verify_p.add_argument('--source', required=True, help='Source directory to scan')
     verify_p.add_argument('--manifest', required=True, help='Path to canary manifest JSON')
     verify_p.set_defaults(func=cmd_verify)
+
+    check_p = subparsers.add_parser('check', help='Drift-check current source against a recorded manifest (run on every commit)')
+    check_p.add_argument('--source', required=True, help='Source directory to hash')
+    check_p.add_argument('--manifest', required=True, help='Path to canary manifest OR public payload JSON')
+    check_p.add_argument('--allow-drift', action='store_true', help='Report drift but exit 0')
+    check_p.set_defaults(func=cmd_check)
 
     fp_p = subparsers.add_parser('fingerprint', help='Generate a release fingerprint for a distribution')
     fp_p.add_argument('--source', required=True, help='Source directory or distribution archive path')

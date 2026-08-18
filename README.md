@@ -36,13 +36,21 @@ python3 tools/opl_registry_gen.py
 | [`opl_registry_gen.py`](tools/opl_registry_gen.py) | **Registry Generator** — Creates a `REGISTRY.json` for Tier 1 adopters who want to publish a structured fee schedule so licensees can self-serve. |
 | [`opl_migrate.py`](tools/opl_migrate.py) | **Migration Helper** — For projects switching from MIT, Apache-2.0, GPL, or BSD to OPL. Auto-detects current license, identifies files needing updates, and generates a migration report. |
 
-### Canary Tokens (OPL-1.1 Legacy)
+### Canary Tokens (OPL-1.4 enforcement backbone)
 
 | Tool | Description |
 |------|-------------|
-| [`canary_embedder.py`](canary_embedder.py) | Embeds canary tokens into text and binary files to detect unauthorized redistribution. |
+| [`canary_embedder.py`](canary_embedder.py) | Embeds canary tokens, builds a Merkle tree, and emits a **private** manifest (secrets) + a **public** payload (proofs, no secrets). Commands: `embed`, `verify`, `check`, `build-merkle`, `fingerprint`, `evidence`. |
+| [`canary_check.py`](canary_check.py) | **CI drift hook** — on every commit, verifies the current tree still matches the committed public payload and fails red on drift (the "repo stays verifiable as it updates" loop). |
 | [`js_embedder.py`](js_embedder.py) | JavaScript-specific canary token embedder for web assets. |
 | [`cicd_pipeline.py`](cicd_pipeline.py) | CI/CD pipeline integration for automated canary token embedding. |
+
+**Secret hygiene:** `embed` writes two files — a private manifest (salt + token
+secrets, gitignored, kept offline) and a public payload (`release_fingerprint.json`,
+safe to publish). **Never share the private manifest**; an attacker who sees its
+secrets can strip every canary. To detect repo drift as it evolves, commit the
+public payload and run `python canary_check.py --repo . --payload canary_release.json`
+in CI.
 
 ### Standard Terms Template
 

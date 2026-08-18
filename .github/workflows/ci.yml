@@ -75,6 +75,8 @@ jobs:
 
       - name: Check syntax
         run: |
+          python -m py_compile canary_embedder.py
+          python -m py_compile canary_check.py
           python -m py_compile tools/opl_spdx_inject.py
           python -m py_compile tools/opl_check.py
           python -m py_compile tools/opl_init.py
@@ -89,3 +91,14 @@ jobs:
 
       - name: Verify SPDX headers
         run: python tools/opl_spdx_inject.py tools/ --check
+
+      # Canary drift hook (G5): if a public canary payload is committed, fail
+      # red when the tree has drifted from its fingerprint. This is how a repo
+      # "stays verifiable as it updates". Absent a payload, it is skipped.
+      - name: Canary drift check
+        run: |
+          if [ -f canary_release.json ]; then
+            python canary_check.py --repo . --payload canary_release.json
+          else
+            echo "No canary_release.json committed — skipping canary drift check."
+          fi
