@@ -200,17 +200,20 @@ register(Adapter(
               help="paid = payment required; free = open; personal = non-commercial only."),
         Param("dosp", "DOSP (scheduled open-sourcing)", "select", "off",
               ["off", "months", "forever_frozen"],
-              help="off = never; months = convert to Apache-2.0 after N; forever_frozen = never, NOT Fair Source."),
+              help="off = never; months = convert to Apache-2.0 after N; "
+                   "forever_frozen = never, NOT Fair Source."),
         Param("dosp_months", "DOSP months", "number", "36"),
         Param("abandonment", "Abandonment", "select", "convert_apache",
               ["convert_apache", "freeze_forever", "custom_period"],
-              help="convert_apache = to Apache-2.0 on abandonment; freeze_forever = stays, NOT Fair Source; custom = set your window."),
+              help="convert_apache = to Apache-2.0 on abandonment; "
+                   "freeze_forever = stays, NOT Fair Source; custom = set your window."),
         Param("abandonment_months", "Abandonment months", "number", "36"),
         Param("opl_ai", "OPL-AI addendum", "select", "out", ["out", "in"],
               help="opt in to restrict AI training."),
         Param("rate_stability", "Rate stability", "select", "immutable_per_version",
               ["changeable", "immutable_per_version"],
-              help="changeable = Maintainer may change terms with notice; immutable_per_version = binding per Version."),
+              help="changeable = Maintainer may change terms with notice; "
+                   "immutable_per_version = binding per Version."),
         Param("derivative", "Derivative notice", "select", "light_copyleft",
               ["light_copyleft", "off"]),
         Param("trademark", "Trademark", "select", "none", ["none", "asserted"]),
@@ -264,7 +267,8 @@ def _custom_opl(p: dict) -> AdapterResult:
         # custom_opl.main() exits non-zero with the hard-block reason on stdout/stderr.
         reason = (so or se or "").strip()
         return AdapterResult(False, {}, [reason or "Custom OPL assembly failed (hard block or error)."])
-    _read = lambda name: (out / name).read_text() if (out / name).exists() else ""
+    def _read(name: str) -> str:
+        return (out / name).read_text() if (out / name).exists() else ""
     lis = _read("LICENSE")
     notice = _read("NOTICE")
     validation = _read("VALIDATION.md")

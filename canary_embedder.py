@@ -17,14 +17,11 @@ Requires: Python 3.10+, stdlib only.
 import argparse
 import hashlib
 import json
-import math
-import os
-import re
 import random
+import re
 import sys
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 CANARY_PREFIX = "canary"
 SUPPORTED_EXTENSIONS = {
@@ -57,7 +54,7 @@ class CanaryToken:
     code_before: str = ""
     code_after: str = ""
     merkle_leaf: str = ""
-    merkle_proof: List[str] = field(default_factory=list)
+    merkle_proof: list[str] = field(default_factory=list)
 
 @dataclass
 class CanaryManifest:
@@ -65,12 +62,12 @@ class CanaryManifest:
     distribution_id: str
     salt: str
     file_hash: str = ""
-    canary_tokens: List[CanaryToken] = field(default_factory=list)
+    canary_tokens: list[CanaryToken] = field(default_factory=list)
     merkle_root: str = ""
     # Per-file sha3-256 {relative_path: hash} for the tree at fingerprint time.
     # Lets `verify --against` report exactly WHICH files changed as the repo
     # evolves (the "when a repo updates too" requirement).
-    source_files: Dict[str, str] = field(default_factory=dict)
+    source_files: dict[str, str] = field(default_factory=dict)
 
 class TokenGenerator:
     @staticmethod
@@ -84,7 +81,7 @@ class MerkleTree:
     def hash(data: str) -> str:
         return hashlib.sha3_256(data.encode()).hexdigest()
 
-    def build(self, leaves: List[str]) -> Tuple[str, List[List[str]]]:
+    def build(self, leaves: list[str]) -> tuple[str, list[list[str]]]:
         if not leaves:
             raise ValueError("At least one leaf required")
         hashed = [self.hash(leaf) for leaf in leaves]
@@ -105,7 +102,7 @@ class MerkleTree:
             level = next_level
         return level[0], tree
 
-    def get_proof(self, tree: List[List[str]], leaf_index: int) -> List[str]:
+    def get_proof(self, tree: list[list[str]], leaf_index: int) -> list[str]:
         proof = []
         index = leaf_index
         for level in range(len(tree) - 1):
@@ -128,9 +125,9 @@ class VariableInjectionEmbedder:
     }
 
     def __init__(self) -> None:
-        self.files_modified: List[str] = []
+        self.files_modified: list[str] = []
 
-    def embed(self, source_dir: Path, token: str, rng: random.Random) -> Optional[str]:
+    def embed(self, source_dir: Path, token: str, rng: random.Random) -> str | None:
         files = []
         for ext in self.TEMPLATES:
             files.extend(source_dir.rglob(f'*{ext}'))
@@ -160,7 +157,7 @@ class VariableInjectionEmbedder:
             return True
         return bool(parts & EXCLUDED_DIRS)
 
-    def _find_insertion_point(self, lines: List[str], suffix: str) -> int:
+    def _find_insertion_point(self, lines: list[str], suffix: str) -> int:
         insert_at = 0
         in_imports = False
         for i, line in enumerate(lines):
@@ -185,9 +182,9 @@ class VariableInjectionEmbedder:
 
 class WatermarkEmbedder:
     def __init__(self) -> None:
-        self.files_modified: List[str] = []
+        self.files_modified: list[str] = []
 
-    def embed(self, source_dir: Path, token: str, rng: random.Random) -> Optional[str]:
+    def embed(self, source_dir: Path, token: str, rng: random.Random) -> str | None:
         python_files = [f for f in source_dir.rglob('*.py')
                        if not self._is_excluded(f) and f.stat().st_size < 500_000]
         if not python_files:
@@ -227,9 +224,9 @@ class WatermarkEmbedder:
 
 class DeadCodeEmbedder:
     def __init__(self) -> None:
-        self.files_modified: List[str] = []
+        self.files_modified: list[str] = []
 
-    def embed(self, source_dir: Path, token: str, rng: random.Random) -> Optional[str]:
+    def embed(self, source_dir: Path, token: str, rng: random.Random) -> str | None:
         python_files = [f for f in source_dir.rglob('*.py')
                        if not self._is_excluded(f) and f.stat().st_size < 500_000]
         if not python_files:
@@ -274,16 +271,16 @@ class DeadCodeEmbedder:
         return bool(parts & EXCLUDED_DIRS)
 
 class CanaryEmbedder:
-    def __init__(self, project_id: int, distribution_id: str, salt: str, strategies: Optional[List[str]] = None, num_canaries: int = 10) -> None:
+    def __init__(self, project_id: int, distribution_id: str, salt: str, strategies: list[str] | None = None, num_canaries: int = 10) -> None:
         self.project_id = project_id
         self.distribution_id = distribution_id
         self.salt = salt
         self.num_canaries = num_canaries
         self.strategies_str = strategies or ['variable', 'watermark']
-        self.tokens: List[CanaryToken] = []
+        self.tokens: list[CanaryToken] = []
         self.merkle_tree = MerkleTree()
         self.tree_root = ""
-        self.tree_levels: List[List[str]] = []
+        self.tree_levels: list[list[str]] = []
         self.strategy_map = {
             'variable': VariableInjectionEmbedder(),
             'deadcode': DeadCodeEmbedder(),
@@ -301,7 +298,7 @@ class CanaryEmbedder:
                 target_file="", line_number=-1, code_before="", code_after="",
             ))
 
-    def embed(self, source_dir: Path) -> List[CanaryToken]:
+    def embed(self, source_dir: Path) -> list[CanaryToken]:
         rng = random.Random(f"{self.project_id}_{self.distribution_id}_{self.salt}".encode())
         for token in self.tokens:
             strategy = self.strategy_map.get(token.embedding_type)
@@ -337,9 +334,9 @@ class CanaryEmbedder:
             source_files=source_files,
         )
 
-    def _hash_tree(self, source_dir: Path) -> Tuple[str, Dict[str, str]]:
+    def _hash_tree(self, source_dir: Path) -> tuple[str, dict[str, str]]:
         h = hashlib.sha3_256()
-        files: Dict[str, str] = {}
+        files: dict[str, str] = {}
         for f in sorted(source_dir.rglob('*')):
             if f.is_file() and f.suffix in SUPPORTED_EXTENSIONS:
                 rel = f.relative_to(source_dir).as_posix()
@@ -349,11 +346,11 @@ class CanaryEmbedder:
                 h.update(f.read_bytes())
         return h.hexdigest(), files
 
-    def hash_current_tree(self, source_dir: Path) -> Tuple[str, Dict[str, str]]:
+    def hash_current_tree(self, source_dir: Path) -> tuple[str, dict[str, str]]:
         """Hash the current tree for drift comparison against a recorded manifest."""
         return self._hash_tree(source_dir)
 
-    def verify_source(self, source_dir: Path, manifest: CanaryManifest) -> List[Tuple[str, str]]:
+    def verify_source(self, source_dir: Path, manifest: CanaryManifest) -> list[tuple[str, str]]:
         matches = []
         for token_data in manifest.canary_tokens:
             secret = token_data.secret
@@ -619,7 +616,7 @@ OPL-1.4 Drift check
         if not args.allow_drift:
             sys.exit(1)
     else:
-        print(f"\nOK: repo matches the recorded fingerprint. No drift.")
+        print("\nOK: repo matches the recorded fingerprint. No drift.")
 
 
 def _hash_source(source_dir: Path, archive: bool) -> str:

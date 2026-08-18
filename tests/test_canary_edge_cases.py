@@ -491,7 +491,8 @@ class TestSecretSplit:
         assert pub["canary_tokens"][0]["merkle_proof"] == ["P"]
 
     def test_embed_writes_public_payload_without_secrets(self, tmp_path):
-        src = tmp_path / "src"; src.mkdir()
+        src = tmp_path / "src"
+        src.mkdir()
         (src / "app.py").write_text("def hello():\n    pass\n")
         priv = tmp_path / "priv.json"
         pub = tmp_path / "pub.json"
@@ -526,13 +527,12 @@ class TestSelfExclusion:
         target = tmp_path / "canary_embedder.py"
         target.write_text("def real():\n    pass\n")
         (tmp_path / "app.py").write_text("def f():\n    pass\n")
-        from canary_embedder import VariableInjectionEmbedder, SELF_EXCLUDED_FILENAMES
+        from canary_embedder import VariableInjectionEmbedder
         emb = VariableInjectionEmbedder()
-        rng = random.Random(b"x")
         assert emb._is_excluded(target) is True
 
     def test_is_excluded_respects_self_filenames(self, tmp_path):
-        from canary_embedder import VariableInjectionEmbedder, SELF_EXCLUDED_FILENAMES
+        from canary_embedder import SELF_EXCLUDED_FILENAMES, VariableInjectionEmbedder
         emb = VariableInjectionEmbedder()
         for name in SELF_EXCLUDED_FILENAMES:
             assert emb._is_excluded(tmp_path / name) is True
@@ -540,7 +540,8 @@ class TestSelfExclusion:
 
 class TestDocGenerateTokensCLIFix:
     def test_embed_generates_tokens_via_cli(self, tmp_path):
-        src = tmp_path / "src"; src.mkdir()
+        src = tmp_path / "src"
+        src.mkdir()
         (src / "app.py").write_text("def main():\n    return 1\n")
         out = tmp_path / "m.json"
         r = run_canary(
@@ -558,7 +559,8 @@ class TestDocGenerateTokensCLIFix:
 
 class TestDriftCheck:
     def _make_repo(self, tmp_path):
-        src = tmp_path / "src"; src.mkdir()
+        src = tmp_path / "src"
+        src.mkdir()
         (src / "app.py").write_text("def hello():\n    print('hi')\n")
         (src / "mod.py").write_text("x = 1\n")
         return src
@@ -613,7 +615,8 @@ class TestDriftCheck:
 
 class TestCanaryCheckScript:
     def _make_repo(self, tmp_path):
-        src = tmp_path / "src"; src.mkdir()
+        src = tmp_path / "src"
+        src.mkdir()
         (src / "app.py").write_text("def hello():\n    print('hi')\n")
         return src
 
