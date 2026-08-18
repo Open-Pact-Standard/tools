@@ -15,6 +15,7 @@ Exit codes: 0 = matches, 1 = drift (or config/usage error).
 """
 
 import argparse
+import importlib.util
 import subprocess
 import sys
 from pathlib import Path
@@ -23,9 +24,21 @@ TOOLS_DIR = Path(__file__).resolve().parent
 EMBEDDER = TOOLS_DIR / "canary_embedder.py"
 DEFAULT_PAYLOAD = "canary_release.json"
 
+# Single source of truth: the OPL tools version (stdlib-only, import-safe).
+_vpath = TOOLS_DIR / "tools" / "_version.py"
+_vspec = importlib.util.spec_from_file_location("_opl_version", _vpath)
+if _vspec and _vspec.loader:
+    _vmod = importlib.util.module_from_spec(_vspec)
+    _vspec.loader.exec_module(_vmod)
+    __version__ = _vmod.__version__
+else:
+    __version__ = "1.4"
+
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="OPL canary CI drift hook")
+    ap.add_argument("-V", "--version", action="version",
+                    version=f"OPL-1.4 canary CI hook v{__version__}")
     ap.add_argument("--repo", required=True, help="Repository source directory to hash")
     ap.add_argument("--payload", default=DEFAULT_PAYLOAD,
                     help="Path to the PUBLIC canary payload (default: canary_release.json)")

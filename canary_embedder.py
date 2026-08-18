@@ -20,6 +20,18 @@ import json
 import random
 import re
 import sys
+
+# Single source of truth: the OPL tools version (stdlib-only, import-safe).
+import importlib.util
+from pathlib import Path
+_VERSION_PATH = Path(__file__).resolve().parent / "tools" / "_version.py"
+_spec = importlib.util.spec_from_file_location("_opl_version", _VERSION_PATH)
+_mod = importlib.util.module_from_spec(_spec)
+if _spec and _spec.loader:
+    _spec.loader.exec_module(_mod)
+    __version__ = _mod.__version__
+else:
+    __version__ = "1.4"
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -68,6 +80,16 @@ class CanaryManifest:
     # Lets `verify --against` report exactly WHICH files changed as the repo
     # evolves (the "when a repo updates too" requirement).
     source_files: dict[str, str] = field(default_factory=dict)
+
+def _load_manifest(path: Path) -> dict:
+    """Read + parse a JSON manifest; exit cleanly (no traceback) on any failure."""
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"Error: cannot parse manifest at {path}: {e}", file=sys.stderr)
+        sys.exit(1)
+
 
 class TokenGenerator:
     @staticmethod
@@ -505,8 +527,7 @@ def cmd_build_merkle(args: argparse.Namespace) -> None:
     if not manifest_path.exists():
         print(f"Error: {manifest_path} not found", file=sys.stderr)
         sys.exit(1)
-    with open(manifest_path) as f:
-        manifest = json.load(f)
+    manifest = _load_manifest(manifest_path)
     mt = MerkleTree()
     leaves = []
     for token in manifest['canary_tokens']:
@@ -532,8 +553,7 @@ def cmd_verify(args: argparse.Namespace) -> None:
         print(f"Error: {manifest_path} not found", file=sys.stderr)
         sys.exit(1)
 
-    with open(manifest_path) as f:
-        manifest_data = json.load(f)
+    manifest_data = _load_manifest(manifest_path)
 
     salt = manifest_data.get('_steward_secret_salt', '')
     embedder = CanaryEmbedder(
@@ -598,8 +618,7 @@ def cmd_check(args: argparse.Namespace) -> None:
     if not manifest_path.exists():
         print(f"Error: {manifest_path} not found", file=sys.stderr)
         sys.exit(1)
-    with open(manifest_path) as f:
-        manifest_data = json.load(f)
+    manifest_data = _load_manifest(manifest_path)
     recorded_files = manifest_data.get('source_files', {})
     if not recorded_files:
         print("Error: manifest has no 'source_files' record (generated before "
@@ -665,8 +684,7 @@ def cmd_fingerprint(args: argparse.Namespace) -> None:
     if not (source.is_dir() or source.is_file()):
         print(f"Error: {source} not found", file=sys.stderr)
         sys.exit(1)
-    with open(manifest_path) as f:
-        manifest_data = json.load(f)
+    manifest_data = _load_manifest(manifest_path)
     source_hash = _hash_source(source, args.archive)
     fingerprint = {
         "project_id": manifest_data.get("project_id"),
@@ -691,8 +709,7 @@ def cmd_evidence(args: argparse.Namespace) -> None:
     if not suspect.is_dir():
         print(f"Error: {suspect} is not a directory", file=sys.stderr)
         sys.exit(1)
-    with open(manifest_path) as f:
-        manifest_data = json.load(f)
+    manifest_data = _load_manifest(manifest_path)
     salt = manifest_data.get("_steward_secret_salt", "")
     embedder = CanaryEmbedder(
         project_id=manifest_data["project_id"],
@@ -728,6 +745,8 @@ def main() -> None:
                     "release fingerprinting, and litigation evidence assembly. "
                     "Optional enforcement backbone for the OPL-AI addendum. "
                     "Stdlib-only, Python 3.10+.")
+    parser.add_argument('-V', '--version', action='version',
+                        version=f"OPL-1.4 canary tool v{__version__}")
     subparsers = parser.add_subparsers(dest='command', help='Available commands')
 
     embed_p = subparsers.add_parser(

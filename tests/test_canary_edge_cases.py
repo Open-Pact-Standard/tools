@@ -596,6 +596,32 @@ class TestDocGenerateTokensCLIFix:
         assert out.exists(), "embed must create the output file's parent directory"
         assert (tmp_path / ".canary").is_dir()
 
+    def test_cli_version_flag(self):
+        # G1: -V / --version must be accepted on the tool's top-level parser and
+        # surfaced the OPL tools version — scriptability + version-consistency.
+        for flag in ("-V", "--version"):
+            r = run_canary(flag)
+            assert r.returncode == 0, f"{flag} must not error"
+            assert "v1.4" in r.stdout, f"{flag} must print the OPL tools version"
+
+    def test_malformed_manifest_errors_cleanly(self, tmp_path):
+        # G2: a corrupt/truncated manifest must produce a clean error, never a
+        # raw traceback, across every manifest-reading subcommand.
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "app.py").write_text("x=1")
+        bad = tmp_path / "bad.json"
+        bad.write_text("{this is not valid json!!!")
+        for cmd, args in [
+            ("check", ["--source", str(tmp_path), "--manifest", str(bad)]),
+            ("build-merkle", ["--manifest", str(bad)]),
+            ("verify", ["--source", str(tmp_path), "--manifest", str(bad)]),
+        ]:
+            r = run_canary(cmd, *args)
+            assert r.returncode == 1, f"{cmd} should exit 1 on malformed manifest"
+            assert "Traceback" not in (r.stdout + r.stderr), f"{cmd} leaked a traceback"
+            assert "cannot parse manifest" in (r.stdout + r.stderr) or "Error" in (r.stdout + r.stderr)
+
 
 class TestDriftCheck:
     def _make_repo(self, tmp_path):
