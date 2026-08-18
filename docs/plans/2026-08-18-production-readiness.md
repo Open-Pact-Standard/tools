@@ -3,6 +3,7 @@
 **Date:** 2026-08-18
 **Scope:** open-pact-tools, open-pact-license, open-pact-standard.github.io
 **Lens:** systems-design (Meadows leverage ladder)
+**Status:** ✅ COMPLETE — all phases landed, all three repos pushed, v1.4.3 tagged, site live.
 
 ## P0 (one line)
 A dev team can adopt OPL into a repo and keep it verifiably OPL-compliant as the
