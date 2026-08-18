@@ -429,14 +429,16 @@ class TestCanaryCLIEdgeCases:
 # ---------------------------------------------------------------------------
 
 class TestCICDEdgeCases:
-    def test_missing_config(self):
-        r = run_cicd("--config", "/nonexistent/config.json")
+    def test_missing_config(self, tmp_path):
+        # Must be hermetic: no --source + dry-run so the pipeline never embeds
+        # into the repo root. A missing config implies default source_dir='.'.
+        r = run_cicd("--config", "/nonexistent/config.json", "--dry-run", "--source", str(tmp_path))
         assert r.returncode == 0 or r.returncode != 0
 
     def test_empty_config_file(self, tmp_path):
         cfg = tmp_path / "empty.json"
         cfg.write_text("{}")
-        r = run_cicd("--config", str(cfg))
+        r = run_cicd("--config", str(cfg), "--dry-run", "--source", str(tmp_path))
         assert r.returncode == 0 or "Error" in r.stderr
 
     def test_malformed_json_config(self, tmp_path):
@@ -452,6 +454,14 @@ class TestCICDEdgeCases:
     def test_empty_source_directory(self, tmp_path):
         r = run_cicd("--source", str(tmp_path), "--dry-run")
         assert r.returncode == 0
+
+    def test_refuses_embed_without_project_id(self, tmp_path):
+        # G3-adjacent: an embed without project_id must refuse rather than
+        # fingerprint the tree as unattested — and must NOT touch the repo.
+        (tmp_path / "app.py").write_text("def f():\n    pass\n")
+        r = run_cicd("--source", str(tmp_path))
+        assert r.returncode == 0
+        assert "project_id" in r.stderr or "project_id" in r.stdout
 
 
 # ---------------------------------------------------------------------------

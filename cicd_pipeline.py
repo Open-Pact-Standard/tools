@@ -52,6 +52,11 @@ class CanaryCIPipeline:
         
         # Step 2: Embed
         if not dry_run:
+            if not self.project_id:
+                print("Error: project_id is required to embed canaries. Pass --project-id "
+                      "(or set it in config); refusing to fingerprint an unattested tree.",
+                      file=sys.stderr)
+                return {"error": "project_id required"}
             print("\n[2/5] Embedding canary tokens...")
             from canary_embedder import CanaryEmbedder
             embedder = CanaryEmbedder(
