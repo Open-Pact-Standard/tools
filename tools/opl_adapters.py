@@ -120,8 +120,21 @@ def _adopt(root: Path | None, p: dict) -> AdapterResult:
     if write and root:
         rc, so, se = run_tool("opl_init.py", *args, "--output", str(root / "NOTICE"))
         rc2, so2, _se2 = run_tool("opl_spdx_inject.py", str(root))
-        return AdapterResult(rc == 0 and rc2 == 0, {}, [so.strip(), so2.strip()],
-                            "Wrote NOTICE + injected SPDX headers into your repo.")
+        # Write the Custom OPL LICENSE to the repo root so the repo is compliant.
+        # Previously only NOTICE + SPDX headers were written and LICENSE was left
+        # as a "manual step" even though the adapter reported success — a real
+        # usability bug a pilot would hit immediately.
+        lic = _assemble_license(p, jur)
+        lic_written = False
+        if lic and not lic.startswith("(") and not lic.startswith("usage"):
+            (root / "LICENSE.md").write_text(lic, encoding="utf-8")
+            lic_written = True
+        ok = rc == 0 and rc2 == 0 and lic_written
+        parts = [so.strip(), so2.strip()]
+        if lic_written:
+            parts.append(f"Wrote LICENSE.md to {root}/")
+        return AdapterResult(ok, {}, parts,
+                            "Wrote NOTICE + LICENSE.md + injected SPDX headers into your repo.")
     # Preview: emit NOTICE to a temp location and assemble a Custom OPL LICENSE.
     import tempfile
     tmp = Path(tempfile.mkdtemp())
@@ -510,7 +523,7 @@ def _adopt_full(root: Path | None, p: dict) -> AdapterResult:
     scan_rc, scan_out, _ = run_tool("opl_check.py", "--skip-remote", str(root))
     outputs = dict(adopt_res.outputs)
     outputs["opl_check"] = scan_out
-    cons = "Repo written + validated. Remaining manual step: add OPL LICENSE.md to repo root." \
+    cons = "Repo written + validated: NOTICE + LICENSE.md + SPDX headers in place." \
         if scan_rc == 0 else "Written, but opl_check found issues — see opl_check output."
     return AdapterResult(write_res.ok, outputs, msg, cons)
 

@@ -44,7 +44,12 @@ def _run(id: str, params: dict) -> dict:
     try:
         sys.path.insert(0, str(TOOLS))
         import opl_adapters as adapters
-        res = adapters.run_adapter(id, None, params or {})
+        # Repo-based adapters (scan, adopt-full, migrate) need `root` derived from
+        # params["repo"] — mirror the Studio's /api/adapter handler, which computes
+        # root from the repo param rather than passing root=None.
+        repo = (params or {}).get("repo", "").strip()
+        root = Path(repo) if repo and Path(repo).is_dir() else None
+        res = adapters.run_adapter(id, root, params or {})
         return {
             "ok": res.ok,
             "outputs": res.outputs,

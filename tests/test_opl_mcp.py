@@ -33,6 +33,10 @@ def test_run_unknown_adapter():
 def test_run_scan_offline(tmp_path):
     res = m._run("scan", {"repo": str(tmp_path), "mode": "report", "skip_remote": "true"})
     assert "ok" in res
+    # regression guard: repo-based tools must derive root from params["repo"]
+    (tmp_path / "src").mkdir()
+    res2 = m._run("scan", {"repo": str(tmp_path), "mode": "report", "skip_remote": "true"})
+    assert "opl_check" in res2.get("outputs", {})
 
 
 def test_run_custom_opl_hard_block():

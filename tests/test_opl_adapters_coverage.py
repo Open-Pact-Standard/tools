@@ -99,6 +99,24 @@ class TestAdoptFull:
         })
         assert res.ok is True
         assert "NOTICE" in res.outputs or "LICENSE (Custom OPL)" in res.outputs
+        # Preview must NOT write to the repo.
+        assert not (tmp_path / "LICENSE.md").exists()
+
+    def test_adopt_full_confirm_writes_license(self, tmp_path):
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "a.py").write_text("print(1)\n")
+        res = adapters.run_adapter("adopt-full", None, {
+            "repo": str(tmp_path),
+            "confirm": "true",
+            "maintainer": "Test <t@e.com>",
+            "terms_url": "https://example.com/t",
+        })
+        # The confirmed write must land a real LICENSE.md (regression guard for the
+        # dogfood find: adopt-full reported success without writing the license).
+        assert res.ok is True
+        assert (tmp_path / "LICENSE.md").exists()
+        assert (tmp_path / "NOTICE").exists()
+        assert "Customization Schedule" in (tmp_path / "LICENSE.md").read_text()
 
 
 class TestMigrate:
