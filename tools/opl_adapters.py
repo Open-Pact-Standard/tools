@@ -11,6 +11,7 @@ packages/adapters/opl-studio/ and implements execute(ctx) against
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from collections.abc import Callable
@@ -66,6 +67,21 @@ def run_tool(script: str, *args: str, cwd: str | None = None):
         return p.returncode, p.stdout, p.stderr
     except Exception as e:
         return -1, "", str(e)
+
+
+def origin_canary_bin() -> Path | None:
+    """Locate the origin-canary (Rust) binary: PATH first, then the origin-tools
+    release build. Missing = canary embedding falls back to the Python
+    canary_embedder (integrity-only), never a crash."""
+    import shutil
+    cands = [
+        Path(shutil.which("origin-canary") or ""),
+        Path.home() / "Coding/Gold/origin-tools/target/release/origin-canary",
+    ]
+    for c in cands:
+        if c and c.is_file() and os.access(c, os.X_OK):
+            return c
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -311,6 +327,108 @@ register(Adapter(
     run=lambda root, p: (_scan_diff(root, p) if str(p.get("mode", "report")).lower() == "diff"
                           else _scan(root, p)),
 ))
+
+
+# ---------------------------------------------------------------------------
+# Canary enforcement — delegates to origin-canary (Rust) for embedding + hybrid
+# post-quantum signing of the release fingerprint. Missing binary = clear
+# guidance, never a crash. This is the ONE place PQ signing lives (see
+# docs/opl-canary-signing-decision.md); the Python canary_embedder stays the
+# simple local embed + CI drift-hook.
+# ---------------------------------------------------------------------------
+register(Adapter(
+    id="canary",
+    title="Enforce with canary tokens",
+    description="Embed canary tokens into a repo and optionally sign the release fingerprint "
+                "with origin-canary's hybrid Ed25519 + Falcon-1024 identity (post-quantum "
+                "provenance). Integrity-only if origin-canary is absent.",
+    params=[
+        Param("repo", "Repository path (source tree)", "repo", "",
+              help="The tree that gets canary tokens embedded."),
+        Param("project_id", "Project ID (any integer you keep stable)", "number", "1"),
+        Param("distribution_id", "Distribution ID (e.g. release version/tag)", "text", ""),
+        Param("manifest_path", "Output manifest path", "text", ".canary/canary_manifest.json",
+              help="Where origin-canary writes the manifest; private (contains secrets)."),
+        Param("salt", "Per-distribution salt (hex, keep offline)", "text", "",
+              help="Secret salt for token generation. If blank, a random one is generated."),
+        Param("num_canaries", "Number of canary tokens", "number", "10",
+              help="Tokens need distinct insert sites; a small repo may not fit 10. "
+                   "Lower this if embed reports 'only embedded N of 10'."),
+        Param("sign", "Sign fingerprint (post-quantum hybrid)", "bool", "false",
+              help="If true and origin-canary is present, sign the Merkle root with the "
+                   "creator's hybrid Ed25519+Falcon-1024 identity."),
+        Param("identity", "Encrypted identity blob (path)", "text", "",
+              help="Path to the identity from `origin identity keygen` (required if sign=true)."),
+    ],
+    run=lambda root, p: _canary(root, p),
+))
+
+
+def _canary(root: Path | None, p: dict) -> AdapterResult:
+    if not root or not root.is_dir():
+        return AdapterResult(False, {}, ["Repository not found."])
+    bin_ = origin_canary_bin()
+    if bin_ is None:
+        return AdapterResult(False, {},
+                             ["origin-canary (Rust) binary not found. Build it in origin-tools: "
+                              "cargo build --release -p origin-canary, then re-run. Meanwhile the "
+                              "Python canary_embedder.py can embed tokens (integrity-only, no PQ sign)."])
+    pid = str(p.get("project_id") or "1")
+    dist = p.get("distribution_id") or ""
+    if not dist:
+        return AdapterResult(False, {}, ["distribution_id is required (e.g. v1.0.0 or a git tag)."])
+    manifest = p.get("manifest_path") or ".canary/canary_manifest.json"
+    # origin-canary embeds tokens THEN writes the manifest; if the output dir
+    # doesn't exist it errors after polluting the source with tokens. Pre-create
+    # the dir so a run can never leave canaries with no manifest.
+    manifest_abs = (root / manifest) if not Path(manifest).is_absolute() else Path(manifest)
+    manifest_abs.parent.mkdir(parents=True, exist_ok=True)
+    salt = p.get("salt") or ""
+    if not salt:
+        import secrets
+        salt = secrets.token_hex(16)
+        msgs_extra = [f"Random salt generated (kept offline): {salt}"]
+    else:
+        msgs_extra = []
+    cmd = [str(bin_), "embed", "--source", str(root),
+           "--project-id", pid, "--distribution-id", dist, "--manifest-out", str(manifest_abs),
+           "--salt", salt, "--num-canaries", str(p.get("num_canaries") or "10")]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    except Exception as e:
+        return AdapterResult(False, {}, [f"origin-canary embed failed: {e}"])
+    out = r.stdout.strip()
+    msgs = [*msgs_extra, out] if out else [*msgs_extra, r.stderr.strip()]
+    if r.returncode != 0:
+        # origin-canary plants some tokens BEFORE failing (e.g. too few eligible
+        # files for the requested count). Be honest: compare against the manifest
+        # count so the user knows a partial embed + no manifest happened.
+        if manifest_abs.exists():
+            try:
+                planted = json.loads(manifest_abs.read_text()).get("token_count")
+                hint = f" (origin-canary planted {planted} tokens but did not finalize the manifest)"
+            except Exception:
+                hint = ""
+        else:
+            hint = " (no manifest written — tokens may be planted without a record)"
+        return AdapterResult(False, {}, msgs,
+                             consequence=f"origin-canary embed exited non-zero{hint}. "
+                                         f"Lower --num-canaries or add more files.")
+
+    # Optional post-quantum hybrid signing of the fingerprint.
+    consequence = "Canaries embedded + manifest written. "
+    if str(p.get("sign", "false")).lower() in ("1", "true", "on") and p.get("identity"):
+        sig = subprocess.run([str(bin_), "sign", "--manifest", str(manifest_abs),
+                              "--identity", p["identity"]],
+                             capture_output=True, text=True, timeout=120)
+        if sig.returncode == 0:
+            consequence += "Release fingerprint signed (hybrid Ed25519 + Falcon-1024)."
+        else:
+            consequence += f"Signing failed: {sig.stderr.strip() or 'sign exited non-zero'}."
+    elif str(p.get("sign", "false")).lower() in ("1", "true", "on"):
+        consequence += "sign=true but no identity path given — skipped signing."
+    return AdapterResult(True, {"origin_canary": out, "manifest": str(manifest_abs)}, msgs,
+                         consequence=consequence)
 
 
 def _scan(root: Path | None, p: dict) -> AdapterResult:
@@ -570,6 +688,14 @@ def _cli_argv_params(argv: list[str]) -> tuple[str, dict]:
     p.add_argument("--skip_remote", default="false", help="skip remote URL check (offline).")
     p.add_argument("--from_license", default="MIT", help="migrate: current license (MIT|Apache-2.0|GPL-3.0).")
     p.add_argument("--dry_run", default="true", help="migrate: true=preview only, false=apply.")
+    p.add_argument("--project_id", default="1", help="canary: OPL project id (integer).")
+    p.add_argument("--distribution_id", default="", help="canary: distribution id (e.g. v1.0.0 / git tag).")
+    p.add_argument("--manifest_path", default=".canary/canary_manifest.json", help="canary: output manifest path.")
+    p.add_argument("--salt", default="", help="canary: per-distribution salt hex (blank = auto-generate).")
+    p.add_argument("--num_canaries", default="10", help="canary: number of canary tokens to embed.")
+    p.add_argument("--sign", default="false", help="canary: true to sign fingerprint with origin-canary identity.")
+    p.add_argument("--identity", default="",
+                   help="canary: path to encrypted identity blob (from `origin identity keygen`).")
     args = p.parse_args(argv)
     params = {
         "repo": args.repo,
@@ -593,6 +719,13 @@ def _cli_argv_params(argv: list[str]) -> tuple[str, dict]:
         "skip_remote": args.skip_remote,
         "from_license": args.from_license,
         "dry_run": args.dry_run,
+        "project_id": args.project_id,
+        "distribution_id": args.distribution_id,
+        "manifest_path": args.manifest_path,
+        "salt": args.salt,
+        "num_canaries": args.num_canaries,
+        "sign": args.sign,
+        "identity": args.identity,
     }
     return args.run, params
 

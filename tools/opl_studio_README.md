@@ -26,6 +26,12 @@ Stop with `Ctrl-C`.
   live as you choose; output lands in a `custom-opl-out/` dir you own.
 - **Scan** — point at any repo and run `opl_check` read-only to see if it's
   OPL-compliant.
+- **Enforce with canary tokens** — embed canary tokens into a repo and option-
+  ally sign the release fingerprint with **origin-canary's hybrid Ed25519 +
+  Falcon-1024** (post-quantum) identity. Delegates to the Rust `origin-canary`
+  binary (from origin-tools); integrity-only embed falls back to the Python
+  canary tool if it's absent. This is the single place post-quantum signing
+  lives (see docs/opl-canary-signing-decision.md).
 - **Kit** — read the Adoption Kit docs and download them as a zip.
 
 ## Design

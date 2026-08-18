@@ -10,9 +10,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 import opl_adapters as adapters
 
 
-def test_six_capabilities_registered():
+def test_capabilities_registered():
     ids = [c["id"] for c in adapters.catalogue()]
-    assert ids == ["adopt", "custom-opl", "scan", "kit", "migrate", "research", "adopt-full"]
+    assert ids == ["adopt", "custom-opl", "scan", "canary", "kit", "migrate", "research", "adopt-full"]
 
 
 def test_migrate_runs_dry_run():

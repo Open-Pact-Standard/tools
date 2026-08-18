@@ -374,3 +374,28 @@ class TestDataclasses:
         reg = adapters.register(a)
         assert reg.id == "tmp_x"
         assert "tmp_x" in adapters.REGISTRY
+
+
+class TestCanary:
+    def test_registered_in_catalogue(self):
+        ids = [a["id"] for a in adapters.catalogue()]
+        assert "canary" in ids
+
+    def test_missing_binary_clear_message(self, tmp_path, monkeypatch):
+        # No origin-canary binary -> clean guidance, not a crash.
+        monkeypatch.setattr(adapters, "origin_canary_bin", lambda: None)
+        res = adapters.run_adapter("canary", tmp_path, {"distribution_id": "v1"})
+        assert not res.ok
+        assert "origin-canary (Rust) binary not found" in res.messages[0]
+
+    def test_missing_distribution_id(self, tmp_path, monkeypatch):
+        # Ensure the bin check passes so we reach the dist check deterministically.
+        monkeypatch.setattr(adapters, "origin_canary_bin", lambda: Path("/bin/true"))
+        res = adapters.run_adapter("canary", tmp_path, {"project_id": "1"})
+        assert not res.ok
+        assert any("distribution_id is required" in m for m in res.messages)
+
+    def test_repo_required(self, tmp_path):
+        res = adapters.run_adapter("canary", tmp_path / "nope", {"distribution_id": "v1"})
+        assert not res.ok
+        assert "Repository not found" in res.messages[0]
