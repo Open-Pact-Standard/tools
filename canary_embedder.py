@@ -405,9 +405,17 @@ def cmd_embed(args: argparse.Namespace) -> None:
     if distribution_id.startswith('0x'):
         distribution_id = distribution_id[2:]
 
+    # If no salt given, generate a strong random one and tell the user once.
+    salt = args.salt
+    generated_salt = False
+    if not salt:
+        import secrets
+        salt = secrets.token_hex(16)
+        generated_salt = True
+
     embedder = CanaryEmbedder(
         project_id=args.project_id, distribution_id=distribution_id,
-        salt=args.salt, strategies=args.strategies.split(','), num_canaries=args.num_canaries,
+        salt=salt, strategies=args.strategies.split(','), num_canaries=args.num_canaries,
     )
     embedder.generate_tokens()  # tokens drive embed + manifest — must run first
 
@@ -418,13 +426,13 @@ OPL-1.4 Fingerprinting — Distribution Manifest
   Source:        {source_dir}
   Project ID:    {args.project_id}
   Distribution:  {distribution_id}
-  Salt:          {args.salt[:8]}{'*'*(len(args.salt)-8) if len(args.salt) > 8 else ''}
+  Salt:          {salt[:8]}{'*'*(len(salt)-8) if len(salt) > 8 else ''}
   Strategies:    {args.strategies}
   Canaries:      {args.num_canaries}
 
 --------------------------------------------------------------------------
   NOTICE: Embedding DISTRIBUTES tracking tokens across the files in the
-  source tree and MODIFIES them (adds a) comment/reference line or a
+  source tree and MODIFIES them (adds a comment/reference line or a
   config-marker variable to N files). This is how canaries are planted so
   a mis-licensed copy can later be proven. Review the diff before you
   commit — and remember this tree is now intentionally watermarked.
@@ -434,6 +442,10 @@ Step 1: Generating canary tokens...
   Generated {len(embedder.tokens)} tokens
 
 Step 2: Embedding tokens into source...""")
+    if generated_salt:
+        print(f"  + no --salt given: generated a random secret salt\n"
+              f"    {salt}\n"
+              f"    Keep it offline. It is recorded in the PRIVATE manifest only.")
     embedder.embed(source_dir)
     print()
 
@@ -454,7 +466,7 @@ Step 2: Embedding tokens into source...""")
         'file_hash': manifest.file_hash, 'merkle_root': manifest.merkle_root,
         'canary_tokens': [asdict(t) for t in manifest.canary_tokens],
         'source_files': manifest.source_files,
-        '_steward_secret_salt': args.salt,
+        '_steward_secret_salt': salt,
     }
     output.write_text(json.dumps(manifest_dict, indent=2))
     print(f"  PRIVATE manifest saved to: {output}  (contains secrets — do NOT publish/gitignore)")
@@ -714,11 +726,34 @@ def main() -> None:
                     "Stdlib-only, Python 3.10+.")
     subparsers = parser.add_subparsers(dest='command', help='Available commands')
 
-    embed_p = subparsers.add_parser('embed', help='Embed canary tokens into source code and generate distribution manifest')
+    embed_p = subparsers.add_parser(
+        'embed', help='Embed canary tokens into source code and generate distribution manifest',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description='Embed canary tokens into your source tree and write the distribution manifest.\n'
+        'This MODIFIES your source files (plants tracking tokens) — review the diff before committing.',
+        epilog='''examples:
+  # Fresh adoption — auto-generates a random secret salt for you
+  python3 canary_embedder.py embed --source ./src --project-id 1 --distribution-id 1.0.0
+
+  # With a known salt (for reproducible litigation evidence)
+  python3 canary_embedder.py embed --source ./src --project-id 1 \
+      --distribution-id 1.0.0 --salt "$(openssl rand -hex 16)"
+
+  # After embedding, guard it in CI on every commit
+  python3 canary_check.py --payload release_fingerprint.json --repo .
+
+tips:
+  --project-id      any integer you assign to this OPL project (keep stable across releases)
+  --distribution-id any unique string per release, e.g. the version (1.0.0) or git tag
+  --salt            a secret. If omitted, a random one is generated and shown once.
+                    GNU guards: keep it offline; the PRIVATE manifest carries it.
+  --output          PRIVATE manifest (secrets) — never commit or distribute this.
+  --public-output   PUBLIC payload (merkle root + proofs, no secrets) — publish this.'''
+    )
     embed_p.add_argument('--source', required=True, help='Source code directory')
     embed_p.add_argument('--project-id', type=int, required=True, help='OPL project ID (arbitrary integer you choose)')
     embed_p.add_argument('--distribution-id', required=True, help='Distribution identifier (any unique string, e.g. release version or hex)')
-    embed_p.add_argument('--salt', required=True, help='Secret salt for token generation (keep offline)')
+    embed_p.add_argument('--salt', default=None, help='Secret salt for token generation (keep offline). If omitted, a random one is generated.')
     embed_p.add_argument('--strategies', default='variable,watermark,deadcode', help='Comma-separated embedding strategies: variable, watermark, deadcode')
     embed_p.add_argument('--num-canaries', type=int, default=10, help='Number of canary tokens to embed')
     embed_p.add_argument('--output', help='Output PRIVATE manifest path (default: canary_manifest.json)')

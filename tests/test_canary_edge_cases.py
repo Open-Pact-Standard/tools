@@ -559,6 +559,27 @@ class TestDocGenerateTokensCLIFix:
         # is never surprised that their source files got watermarked.
         assert "NOTICE: Embedding DISTRIBUTES tracking tokens" in r.stdout
 
+    def test_embed_autogenerates_and_persists_salt(self, tmp_path):
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "app.py").write_text("def main():\n    return 1\n")
+        out = tmp_path / "m.json"
+        r = run_canary(
+            "embed", "--source", str(tmp_path), "--project-id", "6",
+            "--distribution-id", "d2", "--num-canaries", "2",
+            "--output", str(out),
+        )
+        assert r.returncode == 0
+        # U2: a first-timer can run embed with NO --salt; a random salt is
+        # generated, surfaced, and MUST be persisted so litigation evidence
+        # stays reproducible (reg-catch: _steward_secret_salt was set from the
+        # now-None args.salt and came back null, breaking verify).
+        assert "no --salt given: generated a random secret salt" in r.stdout
+        data = json.loads(out.read_text())
+        salt = data.get("_steward_secret_salt")
+        assert salt, "auto-generated salt must be persisted in the private manifest"
+        assert len(salt) >= 16
+
 
 class TestDriftCheck:
     def _make_repo(self, tmp_path):
