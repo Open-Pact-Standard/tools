@@ -6,12 +6,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 
-from opl_init import validate_url, validate_number, generate_notice, ask
 import argparse
+
+from opl_init import generate_notice, validate_number, validate_url
 
 
 class TestValidateUrl:

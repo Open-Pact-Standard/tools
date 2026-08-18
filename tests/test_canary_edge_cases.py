@@ -88,7 +88,7 @@ class TestMerkleTreeEdgeCases:
     def test_two_leaves(self):
         from canary_embedder import MerkleTree
         mt = MerkleTree()
-        root, tree = mt.build(["a", "b"])
+        root, _tree = mt.build(["a", "b"])
         assert isinstance(root, str)
 
     def test_odd_number_of_leaves(self):
@@ -362,7 +362,7 @@ class TestCanaryEmbedderEdgeCases:
         emb = VariableInjectionEmbedder()
         rng = random.Random(b"test")
         # Should not crash due to errors='replace'
-        result = emb.embed(tmp_path, "canary_test", rng)
+        emb.embed(tmp_path, "canary_test", rng)
 
 
 class TestCanaryCLIEdgeCases:

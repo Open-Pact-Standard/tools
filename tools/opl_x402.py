@@ -13,13 +13,11 @@ Usage:
 """
 from __future__ import annotations
 
-from typing import Any
-
 import argparse
 import json
 import sys
 from pathlib import Path
-import re
+from typing import Any
 
 SUPPORTED_CHAINS: dict[str, str] = {
     "base": "Base (EVM)",
@@ -240,6 +238,7 @@ def generate_config(price: float, asset: str, chain: str,
 
 # Single source of truth for version: read from _version.py
 from _version import __version__  # noqa: E402
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(

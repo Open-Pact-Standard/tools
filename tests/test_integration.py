@@ -689,7 +689,8 @@ class TestCLIHelpSmoke:
         assert len(result.stdout) > 50, f"{tool} --help produced no output"
         # Most tools print their name or description
         output_lower = result.stdout.lower()
-        assert "usage" in output_lower or "help" in output_lower or "opl" in output_lower,             f"{tool} --help output doesn't look like help text: {result.stdout[:200]}"
+        assert ("usage" in output_lower or "help" in output_lower or "opl" in output_lower), \
+            f"{tool} --help output doesn't look like help text: {result.stdout[:200]}"
 
     @pytest.mark.parametrize("tool", ALL_TOOLS)
     def test_no_args_shows_help_or_error(self, tool):

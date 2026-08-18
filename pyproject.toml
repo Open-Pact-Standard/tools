@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: OPL-1.3.1
+# SPDX-License-Identifier: OPL-1.4
 [build-system]
 requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
@@ -109,3 +109,13 @@ select = [
     "SIM",   # flake8-simplify
     "RUF",   # ruff-specific rules
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# opl_studio.py embeds minified CSS/JS inside HTML template strings; line
+# length is meaningless there (splitting would churn generated markup).
+"tools/opl_studio.py" = ["E501"]
+# Coverage tests deliberately keep EN DASH inside the German legal citation
+# (§§ 305–310 BGB) and the sys.path-insert-before-import pattern shared by
+# every test module in this suite.
+"tests/*_coverage.py" = ["E402", "RUF001", "RUF005"]
+"tests/test_opl_x402.py" = ["E402"]

@@ -7,8 +7,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 TOOL = str(Path(__file__).resolve().parent.parent / "tools" / "opl_registry_gen.py")
 
 

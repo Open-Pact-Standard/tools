@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: OPL-1.4
 import sys
 from pathlib import Path
 

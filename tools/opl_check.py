@@ -11,8 +11,8 @@ import argparse
 import json
 import re
 import sys
-import urllib.request
 import urllib.error
+import urllib.request
 from pathlib import Path
 
 try:
@@ -137,7 +137,8 @@ def check_standard_terms_url(root: Path, offline: bool = False) -> CheckResult:
             if missing:
                 return CheckResult("standard-terms-url", False,
                     "URL reachable and HTML, but may be missing: " + ", ".join(missing) +
-                    " — verify your Standard Terms page publishes pricing, commercial-use terms, and a payment mechanism or contact.",
+                    " — verify your Standard Terms page publishes pricing, commercial-use "
+                    "terms, and a payment mechanism or contact.",
                     "warning")
             return CheckResult("standard-terms-url", True,
                                f"Standard Terms URL is valid and publishes required content: {url}")
@@ -178,6 +179,7 @@ def check_opl_ai(root: Path) -> CheckResult:
 
 # Single source of truth for version: read from _version.py
 from _version import __version__  # noqa: E402
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(

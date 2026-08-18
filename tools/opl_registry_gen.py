@@ -9,11 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from datetime import datetime, timezone
-import re
-from pathlib import Path
-
 
 BANNER = """
   OPL Registry Generator v1.4
@@ -65,6 +61,7 @@ def ask_yes_no(prompt: str, default: bool = True) -> bool:
 
 # Single source of truth for version: read from _version.py
 from _version import __version__  # noqa: E402
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate REGISTRY.json for OPL Tier 1 adopters")
@@ -118,13 +115,13 @@ def main() -> None:
                 print("    Tier name is required.")
                 continue
             desc = input(f"    Description for '{name}': ").strip()
-            fee_str = input(f"    Fee in USD (0 for free): ").strip()
+            fee_str = input("    Fee in USD (0 for free): ").strip()
             try:
                 fee = int(fee_str) if fee_str else 0
             except ValueError:
                 print("    Invalid number, defaulting to 0.")
                 fee = 0
-            conditions = input(f"    Conditions (e.g. 'Annual fee', 'One-time'): ").strip()
+            conditions = input("    Conditions (e.g. 'Annual fee', 'One-time'): ").strip()
             tiers.append({
                 "name": name, "description": desc,
                 "fee_usd": fee, "conditions": conditions or "None specified",
@@ -167,10 +164,8 @@ def main() -> None:
 
     # Derivative reciprocity
     print("\n  -- Derivative Reciprocity --")
-    if args.non_interactive:
-        reciprocity = True
-    else:
-        reciprocity = ask_yes_no("Require derivatives to also use OPL?", default=True)
+    reciprocity = (True if args.non_interactive
+                   else ask_yes_no("Require derivatives to also use OPL?", default=True))
     reciprocity_note = (
         "Derivatives must be licensed under OPL-1.4 or later."
         if reciprocity else

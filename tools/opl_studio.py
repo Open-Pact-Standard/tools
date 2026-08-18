@@ -21,7 +21,6 @@ from __future__ import annotations
 import argparse
 import html
 import json
-import mimetypes
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -185,13 +184,13 @@ def kit_page() -> str:
         for f in sorted(KIT_DIST.rglob("*.md")):
             rel = f.relative_to(KIT_DIST)
             docs += f'<li><a href="/kit/{urllib.parse.quote(str(rel))}">{html.escape(str(rel))}</a></li>'
-    zip_link = f'<p><a href="/kit/opl-adoption-kit.zip"><button>Download Kit (.zip)</button></a></p>' if KIT_ZIP.exists() else ""
+    zip_link = '<p><a href="/kit/opl-adoption-kit.zip"><button>Download Kit (.zip)</button></a></p>' if KIT_ZIP.exists() else ""
     return f"""<h1>Adoption Kit</h1><p>Read the docs, or download the whole Kit as a zip.</p>{zip_link}
 <div class="card"><h2>Documents</h2><ul>{docs or '<li>(run install.sh to build)</li>'}</ul></div>"""
 
 
 class Handler(BaseHTTPRequestHandler):
-    def log_message(self, format, *args):  # noqa: A002
+    def log_message(self, format, *args):
         pass
 
     def _send(self, body: bytes, ctype: str = "text/html; charset=utf-8", code: int = 200):
@@ -212,10 +211,9 @@ class Handler(BaseHTTPRequestHandler):
         if u.path.startswith("/kit/"):
             rel = urllib.parse.unquote(u.path[len("/kit/"):])
             fp = (KIT_DIST / rel).resolve()
-            if KIT_DIST in fp.parents or fp == KIT_ZIP.resolve():
-                if fp.exists():
-                    ct = "application/zip" if fp.suffix == ".zip" else "text/plain; charset=utf-8"
-                    return self._send(fp.read_bytes(), ct)
+            if (KIT_DIST in fp.parents or fp == KIT_ZIP.resolve()) and fp.exists():
+                ct = "application/zip" if fp.suffix == ".zip" else "text/plain; charset=utf-8"
+                return self._send(fp.read_bytes(), ct)
             return self._send(page('<div class="card fail">Not found.</div>'), code=404)
         return self._send(page('<div class="card fail">Not found.</div>'), code=404)
 

@@ -1,30 +1,22 @@
 """Tests for opl_spdx_inject.py"""
 from __future__ import annotations
 
-import os
-import textwrap
-from pathlib import Path
-
-import pytest
 import sys
+from pathlib import Path
 
 # Add tools directory to path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 
 from opl_spdx_inject import (
     COMMENT_STYLES,
-    SHEBANG_LANGS,
     SPDX_RE,
-    SKIP_DIRS,
-    SKIP_FILES,
-    detect_language,
-    make_header,
-    has_spdx,
-    is_binary,
-    inject_header,
     collect_files,
+    detect_language,
+    has_spdx,
+    inject_header,
+    is_binary,
+    make_header,
 )
-
 
 # --- detect_language ---
 

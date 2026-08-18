@@ -117,10 +117,9 @@ def _adopt(root: Path | None, p: dict) -> AdapterResult:
         "--dosp", p.get("dosp", ""),
         "--commercial-terms", "",
     ]
-    out_dir = str(root) if (write and root) else None
     if write and root:
         rc, so, se = run_tool("opl_init.py", *args, "--output", str(root / "NOTICE"))
-        rc2, so2, se2 = run_tool("opl_spdx_inject.py", str(root))
+        rc2, so2, _se2 = run_tool("opl_spdx_inject.py", str(root))
         return AdapterResult(rc == 0 and rc2 == 0, {}, [so.strip(), so2.strip()],
                             "Wrote NOTICE + injected SPDX headers into your repo.")
     # Preview: emit NOTICE to a temp location and assemble a Custom OPL LICENSE.
@@ -152,7 +151,7 @@ def _assemble_license(p: dict, jur: str) -> str:
     ]
     if p.get("dosp"):
         args += ["--dosp-months", str(p["dosp"])]
-    rc, so, se = run_tool("custom-opl/custom_opl.py", *args)
+    _rc, so, se = run_tool("custom-opl/custom_opl.py", *args)
     lic_path = out / "LICENSE"
     if lic_path.exists():
         return lic_path.read_text()
@@ -225,14 +224,14 @@ def _scan_diff(root: Path | None, p: dict) -> AdapterResult:
     if any(r["check"] in ("notice", "license") for r in failed):
         import tempfile
         tmp = Path(tempfile.mkdtemp())
-        rc_n, so_n, se_n = run_tool(
+        _rc_n, _so_n, _se_n = run_tool(
             "opl_init.py", "--non-interactive",
             "--maintainer", p.get("maintainer", "") or "Unspecified Maintainer",
             "--jurisdiction", p.get("jurisdiction", "") or "United States",
             "--terms-url", p.get("terms_url", "") or "https://example.com/standard-terms",
             "--opl-ai", p.get("opl_ai", "out"),
             "--output", str(tmp / "NOTICE"),
-        )
+        )  # exit code/streams unused: only the generated NOTICE file matters
         notice_path = tmp / "NOTICE"
         if notice_path.exists():
             proposed["NOTICE"] = notice_path.read_text()
@@ -240,10 +239,10 @@ def _scan_diff(root: Path | None, p: dict) -> AdapterResult:
     # 2. SPDX headers missing → list files + exact header line (via --dry-run).
     spdx = next((r for r in failed if r["check"] == "spdx-headers"), None)
     if spdx:
-        rc_s, so_s, se_s = run_tool("opl_spdx_inject.py", str(root), "--dry-run")
+        _rc_s, so_s, _se_s = run_tool("opl_spdx_inject.py", str(root), "--dry-run")
         proposed["SPDX_dry_run"] = so_s
         # also enumerate the files via --check-free collect
-        rc_c, so_c, se_c = run_tool("opl_spdx_inject.py", str(root), "--check")
+        _rc_c, so_c, _se_c = run_tool("opl_spdx_inject.py", str(root), "--check")
         proposed["SPDX_check"] = so_c
 
     # 3. standard-terms-url fail → surface the specific reason (already in message).
@@ -252,7 +251,8 @@ def _scan_diff(root: Path | None, p: dict) -> AdapterResult:
         proposed["standard_terms_url_note"] = stu.get("message", "")
 
     ok = rc == 0
-    summary = "Diff preview ready — review proposed changes, then Apply to adopt." if proposed else "Repo already compliant; nothing to change."
+    summary = ("Diff preview ready — review proposed changes, then Apply to adopt."
+               if proposed else "Repo already compliant; nothing to change.")
     diff["proposed"] = proposed
     return AdapterResult(ok, {"diff": json.dumps(diff, indent=2)}, [se] if se else [], summary)
 
@@ -269,14 +269,15 @@ register(Adapter(
 
 def _kit(root: Path | None, p: dict) -> AdapterResult:
     import shutil
-    rc, so, se = run_tool("adoption-kit/make_kit.py")
+    rc, so, _se = run_tool("adoption-kit/make_kit.py")
     zip_path = HERE / "adoption-kit" / "dist" / "opl-adoption-kit.zip"
     try:
         if not zip_path.exists():
             shutil.make_archive(str(zip_path.with_suffix("")), "zip", zip_path.parent)
     except Exception:
         pass
-    files = sorted(str(f.name) for f in (HERE / "adoption-kit" / "dist").rglob("*.md")) if (HERE / "adoption-kit" / "dist").exists() else []
+    dist = HERE / "adoption-kit" / "dist"
+    files = sorted(str(f.name) for f in dist.rglob("*.md")) if dist.exists() else []
     out = "\n".join(files) or "(run make_kit.py)"
     return AdapterResult(rc == 0, {"kit files": out}, [so.strip()])
 
@@ -385,7 +386,7 @@ def _adopt_full(root: Path | None, p: dict) -> AdapterResult:
     root = Path(repo)
     confirm = str(p.get("confirm", "false")).lower() in ("1", "true", "on", "yes")
     # Step 1: build the Adoption Kit (dist + zip) — surfaces it for download.
-    kit_rc, kit_out, kit_err = run_tool("adoption-kit/make_kit.py", cwd=str(HERE))
+    _kit_rc, kit_out, _kit_err = run_tool("adoption-kit/make_kit.py", cwd=str(HERE))
     # Step 2: assemble NOTICE + Custom LICENSE (preview).
     license_p = {k: v for k, v in p.items() if k != "repo" and k != "confirm"}
     adopt_res = _adopt(root, {**license_p, "write": "false"})
@@ -485,8 +486,11 @@ if __name__ == "__main__":
     else:
         print(f"[{'OK' if res.ok else 'FAIL'}] adapter {aid}")
         for k, v in res.outputs.items():
-            print(f"\n--- {k} ---"); print(v)
-        for m in res.messages: print(m)
-        if res.consequence: print(f"\nConsequence:\n{res.consequence}")
+            print(f"\n--- {k} ---")
+            print(v)
+        for m in res.messages:
+            print(m)
+        if res.consequence:
+            print(f"\nConsequence:\n{res.consequence}")
     sys.exit(0 if res.ok else 1)
 

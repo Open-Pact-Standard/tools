@@ -7,8 +7,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 TOOLS_DIR = str(Path(__file__).resolve().parent.parent / "tools")
 sys.path.insert(0, TOOLS_DIR)
 
@@ -170,7 +168,6 @@ class TestVersionConsistency:
         opl_adapters.py is the harness entry point (not a standalone versioned
         CLI), so it is excluded from the f-string check.
         """
-        import glob as g
         import re as r
         tools_dir = Path(TOOLS_DIR)
         tools_ok = []

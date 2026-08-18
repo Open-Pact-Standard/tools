@@ -6,11 +6,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 
-from opl_check import CheckResult, check_license, check_notice, check_spdx_headers, check_opl_ai
+from opl_check import CheckResult, check_license, check_notice, check_opl_ai, check_spdx_headers
 
 
 class TestCheckResult:
@@ -164,7 +162,9 @@ class TestCLI:
 
     def test_json_output(self, tmp_path):
         tool = str(Path(__file__).resolve().parent.parent / "tools" / "opl_check.py")
-        result = subprocess.run([sys.executable, tool, str(tmp_path), "--json", "--skip-remote"], capture_output=True, text=True)
+        result = subprocess.run(
+            [sys.executable, tool, str(tmp_path), "--json", "--skip-remote"],
+            capture_output=True, text=True)
         assert result.returncode == 1  # no LICENSE or NOTICE
         data = json.loads(result.stdout)
         assert isinstance(data, list)
@@ -176,9 +176,13 @@ class TestCLI:
 
     def test_fully_compliant_repo(self, tmp_path):
         (tmp_path / "LICENSE.md").write_text("Open-Pact License v1.4\n")
-        (tmp_path / "NOTICE").write_text("Maintainer: Test\nStandard Terms: https://example.com/terms\nJurisdiction: California\nOPL v1.4\nAI training: opted out.\n")
+        (tmp_path / "NOTICE").write_text(
+            "Maintainer: Test\nStandard Terms: https://example.com/terms\n"
+            "Jurisdiction: California\nOPL v1.4\nAI training: opted out.\n")
         (tmp_path / "main.py").write_text("# SPDX-License-Identifier: OPL-1.4\nprint('hi')\n")
         tool = str(Path(__file__).resolve().parent.parent / "tools" / "opl_check.py")
-        result = subprocess.run([sys.executable, tool, str(tmp_path), "--skip-remote"], capture_output=True, text=True)
+        result = subprocess.run(
+            [sys.executable, tool, str(tmp_path), "--skip-remote"],
+            capture_output=True, text=True)
         assert result.returncode == 0
         assert "5 passed" in result.stdout

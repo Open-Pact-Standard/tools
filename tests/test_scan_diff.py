@@ -1,24 +1,22 @@
 # SPDX-License-Identifier: OPL-1.4
-import sys
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 
 
-def _mkrepo() -> Path:
-    d = Path(__file__).parent / "_tmp_scanrepo"
-    if d.exists():
-        import shutil
-        shutil.rmtree(d)
-    (d / "src").mkdir(parents=True)
+def _mkrepo(tmp_path: Path) -> Path:
+    d = tmp_path / "repo"
+    d.mkdir()
+    (d / "src").mkdir()
     (d / "src" / "a.py").write_text("x=1\n")
     return d
 
 
-def test_scan_diff_proposes_without_writing():
-    repo = _mkrepo()
+def test_scan_diff_proposes_without_writing(tmp_path):
+    repo = _mkrepo(tmp_path)
     out = subprocess.run(
         [sys.executable, "opl_adapters.py", "--run", "scan", "--json",
          "--repo", str(repo), "--mode", "diff",

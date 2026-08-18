@@ -15,7 +15,8 @@ import re
 import sys
 from pathlib import Path
 
-from _version import __version__  # noqa: E402 — single source of truth for the OPL version
+from _version import __version__
+
 COMMENT_STYLES = {
     "py": ("# ", ""), "rb": ("# ", ""), "pl": ("# ", ""),
     "sh": ("# ", ""), "bash": ("# ", ""), "zsh": ("# ", ""),
@@ -82,7 +83,7 @@ def detect_language(filepath: Path) -> str | None:
     if ext in COMMENT_STYLES:
         return ext
     try:
-        with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+        with open(filepath, encoding="utf-8", errors="ignore") as f:
             first = f.readline(200)
             for shebang, lang in SHEBANG_LANGS.items():
                 if first.startswith(shebang):
@@ -99,7 +100,7 @@ def make_header(lang: str, license_version: str = __version__) -> str:
 
 def has_spdx(filepath: Path) -> bool:
     try:
-        with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+        with open(filepath, encoding="utf-8", errors="ignore") as f:
             head = f.read(4096)
             return bool(SPDX_RE.search(head))
     except (OSError, UnicodeDecodeError):
@@ -118,7 +119,7 @@ def is_binary(filepath: Path) -> bool:
 def inject_header(filepath: Path, lang: str, dry_run: bool = False, license_version: str = __version__) -> bool:
     header = make_header(lang, license_version)
     try:
-        with open(filepath, "r", encoding="utf-8") as f:
+        with open(filepath, encoding="utf-8") as f:
             content = f.read()
     except (OSError, UnicodeDecodeError):
         return False

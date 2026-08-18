@@ -6,11 +6,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 
-from opl_migrate import detect_old_license, scan_manifests, generate_migration_report
+from opl_migrate import detect_old_license, generate_migration_report, scan_manifests
 
 
 class TestDetectOldLicense:
@@ -132,7 +130,9 @@ class TestCLI:
         (tmp_path / "LICENSE").write_text("MIT License\n")
         (tmp_path / "main.py").write_text("print('hi')\n")
         tool = str(Path(__file__).resolve().parent.parent / "tools" / "opl_migrate.py")
-        result = subprocess.run([sys.executable, tool, str(tmp_path), "--non-interactive"], capture_output=True, text=True)
+        result = subprocess.run(
+            [sys.executable, tool, str(tmp_path), "--non-interactive"],
+            capture_output=True, text=True)
         assert result.returncode == 0
         assert "MIT" in result.stdout
         assert "1.4" in result.stdout
