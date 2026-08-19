@@ -197,11 +197,12 @@ register(Adapter(
 def _adopt(root: Path | None, p: dict) -> AdapterResult:
     """Adopt OPL via the hardened opl_adopt.py spine (NOTICE + SPDX + LICENSE
     swap + manifest update + check). Delegates to the real tool rather than
-    reimplementing — this closes the F1/F2 adopt cliffs found in dogfooding."""
+    reimplementing — this closes the F1/F2 adopt cliffs found in dogfooding.
+    Note: opl_adopt.py takes the explicit fields directly (no --non-interactive
+    flag), so we pass them inline."""
     write = str(p.get("write", "false")).lower() in ("1", "true", "on", "yes")
     jur = p.get("jurisdiction") or "United States"
     args = [
-        "--non-interactive",
         "--maintainer", p.get("maintainer", ""),
         "--jurisdiction", jur,
         "--terms-url", p.get("terms_url", ""),

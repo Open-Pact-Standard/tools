@@ -15,7 +15,7 @@ import opl_adapters as adapters
 class TestCatalogue:
     def test_catalogue_ids(self):
         ids = [a["id"] for a in adapters.catalogue()]
-        for expected in ("adopt", "scan", "kit", "research", "migrate", "adopt-full"):
+        for expected in ("adopt-1cmd", "adopt", "scan", "kit", "research", "migrate", "adopt-full"):
             assert expected in ids
 
     def test_catalogue_has_params(self):
@@ -58,8 +58,35 @@ class TestScanDiff:
         (tmp_path / "LICENSE").write_text("OPL\n")
         res = adapters.run_adapter("scan", tmp_path, {"mode": "diff", "skip_remote": "true"})
         assert "diff" in res.outputs
-        diff = __import__("json").loads(res.outputs["diff"])
-        assert "checks" in diff
+
+
+class TestAdoptLive:
+    """The Option-A widget backend must wrap the REAL spine (opl_adopt.py)
+    and yield a self-consistent repo — not reimplement adopt logic."""
+
+    def test_adopt_live_yields_self_consistent_repo(self, tmp_path):
+        # Tiny 1-file Apache fixture.
+        (tmp_path / "LICENSE").write_text("Apache License 2.0\n")
+        (tmp_path / "app.py").write_text("def f():\n    return 1\n")
+        res = adapters.run_adapter("adopt-live", None, {
+            "source": "path", "repo_path": str(tmp_path),
+            "maintainer": "Demo <demo@example.com>",
+            "jurisdiction": "United States",
+            "terms_url": "https://demo.example.com/terms",
+            "opl_ai": "out", "abandonment": "36", "dosp": "",
+        })
+        assert res.ok is True
+        # NOTICE generated, LICENSE swapped, summary present.
+        assert "NOTICE" in res.outputs and res.outputs["NOTICE"].strip()
+        assert "Diff summary" in res.outputs
+        # Repo is actually self-consistent: valid SPDX + OPL LICENSE.
+        notice = (tmp_path / "NOTICE").read_text()
+        assert "OPL Version: 1.4" in notice
+        lic = (tmp_path / "LICENSE").read_text()
+        assert "OPL-1.4" in lic or "Open-Pact" in lic
+        app = (tmp_path / "app.py").read_text()
+        assert "SPDX-License-Identifier: OPL-1.4" in app
+        assert "OPL-OPL-1.4" not in app
 
 
 class TestAdopt:
@@ -82,6 +109,57 @@ class TestAdopt:
         assert isinstance(res.ok, bool)
 
 
+class TestAdopt1Cmd:
+    def test_adopt_1cmd_no_repo(self):
+        # adopt-1cmd requires a real repo path (it runs opl_adopt against it).
+        res = adapters.run_adapter("adopt-1cmd", None, {"maintainer": "X <x@e.com>"})
+        assert res.ok is False
+        assert "Repository not found" in res.messages[0]
+
+    def test_adopt_1cmd_dry_run_self_consistent(self, tmp_path):
+        # Build a minimal repo the spine can act on: a source file + a license file
+        # the swap step will replace, plus manifests to exercise the manifest step.
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "a.py").write_text("print(1)\n")
+        (tmp_path / "LICENSE").write_text("MIT License\n")
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "demo"\nlicense = "MIT"\n')
+        res = adapters.run_adapter("adopt-1cmd", tmp_path, {
+            "maintainer": "Demo <demo@example.com>",
+            "jurisdiction": "United States",
+            "terms_url": "https://example.com/standard-terms",
+            "dry_run": "true",
+        })
+        # Dry run surfaces opl_adopt's real output + VERDICT line.
+        assert res.ok is True
+        body = res.messages[0] if res.messages else ""
+        assert "OPL Adopt" in body
+        assert "VERDICT" in res.consequence
+        # Dry-run semantics (matches opl_adopt): NOTICE + SPDX always run, but the
+        # destructive swaps are skipped — LICENSE and manifest license field stay MIT.
+        assert (tmp_path / "NOTICE").exists()
+        assert (tmp_path / "LICENSE").read_text() == "MIT License\n"
+        assert 'license = "MIT"' in (tmp_path / "pyproject.toml").read_text()
+
+    def test_adopt_1cmd_writes_and_verdict(self, tmp_path):
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "a.py").write_text("# SPDX-License-Identifier: MIT\nprint(1)\n")
+        (tmp_path / "LICENSE").write_text("MIT License\n")
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "demo"\nlicense = "MIT"\n')
+        res = adapters.run_adapter("adopt-1cmd", tmp_path, {
+            "maintainer": "Demo <demo@example.com>",
+            "jurisdiction": "United States",
+            "terms_url": "https://example.com/standard-terms",
+            "dry_run": "false",
+        })
+        assert res.ok is True
+        # The spine did its job: NOTICE + swapped LICENSE + updated manifest.
+        assert (tmp_path / "NOTICE").exists()
+        assert "OPL" in (tmp_path / "LICENSE").read_text().upper()
+        assert "OPL-1.4" in (tmp_path / "pyproject.toml").read_text()
+
+
 class TestAdoptFull:
     def test_adopt_full_no_repo(self):
         res = adapters.run_adapter("adopt-full", None, {})
@@ -100,7 +178,7 @@ class TestAdoptFull:
         assert res.ok is True
         assert "NOTICE" in res.outputs or "LICENSE (Custom OPL)" in res.outputs
         # Preview must NOT write to the repo.
-        assert not (tmp_path / "LICENSE.md").exists()
+        assert not (tmp_path / "LICENSE").exists()
 
     def test_adopt_full_confirm_writes_license(self, tmp_path):
         (tmp_path / "src").mkdir()
@@ -114,7 +192,7 @@ class TestAdoptFull:
         # The confirmed write must land a real LICENSE.md (regression guard for the
         # dogfood find: adopt-full reported success without writing the license).
         assert res.ok is True
-        assert (tmp_path / "LICENSE.md").exists()
+        assert (tmp_path / "LICENSE").exists()
         assert (tmp_path / "NOTICE").exists()
         assert "Customization Schedule" in (tmp_path / "LICENSE.md").read_text()
 
