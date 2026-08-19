@@ -181,6 +181,54 @@ def check_opl_ai(root: Path) -> CheckResult:
 from _version import __version__  # noqa: E402
 
 
+def summarize_for_user(root: Path) -> str:
+    """F4: consumer-side view. Reads the repo's NOTICE and prints a commercial
+    USER's obligations in plain language — the balancing-loop counterpart to the
+    maintainer's opl_check. Mirrors the site 'Using' tab content."""
+    notice_content = None
+    for name in ["NOTICE", "NOTICE.md", "NOTICE.txt"]:
+        p = root / name
+        if p.exists():
+            notice_content = p.read_text(encoding="utf-8", errors="ignore")
+            break
+    if not notice_content:
+        return ("  No NOTICE file found. If this is an OPL-licensed work, the NOTICE\n"
+                "  should state the maintainer, jurisdiction, and Standard Terms URL.\n"
+                "  Without it, you cannot confirm your commercial-use obligations.")
+    def get(key: str) -> str:
+        m = re.search(rf"(?i){key}\s*[:=]\s*(.+)", notice_content)
+        return m.group(1).strip() if m else ""
+
+    maintainer = get("maintainer") or get("copyright") or "(unknown maintainer)"
+    jurisdiction = get("governing jurisdiction") or get("jurisdiction") or "(unspecified)"
+    terms_url = get("standard terms url") or get("standard terms") or ""
+    opl_ai = get("opl-ai") or get("opl.ai") or ""
+    abandonment = get("abandonment period") or "36"
+    lines = [
+        "  You are looking at software under the Open-Pact License v1.4.",
+        "",
+        "  FREE for you, no payment or account:",
+        "    - Personal projects, education, and research.",
+        "    - Reading, modifying, and sharing the (public) source.",
+        "",
+        "  COMMERCIAL use REQUIRES payment:",
+        f"    - Maintainer: {maintainer}",
+        f"    - Standard Terms (pricing + how to pay): {terms_url or '(not declared — ask the maintainer)'}",
+        f"    - Governing law: {jurisdiction}",
+        "",
+        "  You are protected:",
+        f"    - If the maintainer is silent for {abandonment} consecutive months, the Work",
+        "      converts to Apache-2.0 for everyone automatically.",
+    ]
+    if re.search(r"(?i)opted in", opl_ai):
+        lines.append("    - OPL-AI is OPTED IN: do not train AI models on this code.")
+    else:
+        lines.append("    - OPL-AI: not restricted (AI training permitted unless stated elsewhere).")
+    lines.append("")
+    lines.append("  Respect the commercial terms and you are in the clear. No license key needed.")
+    return "\n".join(lines)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Check OPL v1.4 compliance for a repository")
@@ -197,6 +245,8 @@ def main() -> None:
                         help="Check terms URL structurally (HTTPS + present) without fetching")
     parser.add_argument("--exclude", action="append", default=[],
                         help="Exclude pattern for SPDX check")
+    parser.add_argument("--as-user", action="store_true",
+                        help="F4: print a commercial USER's obligations for this repo (consumer view)")
     parser.add_argument("--check", action="store_true",
                         help="CI mode: exit non-zero on any failure, output JSON")
     args = parser.parse_args()
@@ -205,6 +255,11 @@ def main() -> None:
     if not root.is_dir():
         print(f"Error: {root} is not a directory", file=sys.stderr)
         sys.exit(1)
+
+    # F4: consumer-side view — print the user's obligations and stop.
+    if args.as_user:
+        print(summarize_for_user(root))
+        return
 
     # --check implies --json for machine-readable CI output
     if args.check:

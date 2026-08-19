@@ -1124,3 +1124,38 @@ class TestCanaryCheckScript:
         assert 'license = "OPL-1.4"' in cargo, "manifest license not updated"
         # Final check reports self-consistency
         assert "5 passed" in r.stdout and "0 errors" in r.stdout
+
+
+    def test_opl_init_terms_template_generates_publishable_page(self, tmp_path):
+        # F3: --terms-template yields a valid standalone HTML Standard Terms page.
+        out = tmp_path / "standard-terms.html"
+        r = subprocess.run(
+            [sys.executable, str(Path(TOOLS_DIR) / "tools" / "opl_init.py"), "--terms-template",
+             "--non-interactive", "--maintainer", "Acme <a@acme.dev>",
+             "--jurisdiction", "United States", "--terms-url", "https://acme.dev/terms",
+             "--opl-ai", "in", "--output", str(out)],
+            capture_output=True, text=True, timeout=30)
+        assert r.returncode == 0, r.stderr
+        html = out.read_text()
+        assert html.strip().startswith("<!doctype html>")
+        assert "Standard Terms" in html
+        assert "opted in" in html  # OPL-AI elected-in text present
+        assert "</html>" in html
+
+    def test_opl_check_as_user_prints_consumer_obligations(self, tmp_path):
+        # F4: --as-user prints the commercial user's plain-language obligations
+        # from the repo NOTICE (the balancing-loop counterpart to opl_check).
+        (tmp_path / "NOTICE").write_text(
+            "Maintainer: Acme <a@acme.dev>\n"
+            "Governing Jurisdiction: United States\n"
+            "Standard Terms URL: https://acme.dev/terms\n"
+            "OPL-AI: opted in.\n")
+        r = subprocess.run(
+            [sys.executable, str(Path(TOOLS_DIR) / "tools" / "opl_check.py"), str(tmp_path), "--as-user"],
+            capture_output=True, text=True, timeout=30)
+        assert r.returncode == 0, r.stderr
+        out = r.stdout
+        assert "Open-Pact License v1.4" in out
+        assert "COMMERCIAL use REQUIRES payment" in out
+        assert "https://acme.dev/terms" in out
+        assert "OPL-AI is OPTED IN" in out
