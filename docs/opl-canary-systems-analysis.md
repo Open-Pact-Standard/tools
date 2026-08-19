@@ -70,7 +70,8 @@ attribution, and secondarily the legal/community proof the evidence supports.
 - **Shifting the burden (B):** currently the "hunt" idea risks becoming a
   *crutch* — "I searched GitHub, so I'm safe." That's false security: GH search
   only sees **public repos**, misses **private forks** and **non-GitHub hosts**,
-  and the variable-encoded canaries aren't text-searchable. Defense: hunt
+  and the variable-encoded canaries aren't directly text-searchable on GitHub
+  (though `verify` CAN detect them from their derived markers). Defense: hunt
   output must print its blind spots; fuse Watermark comments for searchability;
   treat a "no match" as "not found here," never "not stolen."
 
