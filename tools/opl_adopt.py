@@ -363,9 +363,22 @@ def _print_next_steps(root: Path, args) -> None:
     print("    3. (Optional) Tag a release noting 'now under OPL-1.4'.")
     if getattr(args, "canary", False):
         print("    4. (Canary) Store the salt OFFLINE; keep .canary/canary_manifest.json")
-        print("       PRIVATE (never commit it). To verify later or if you suspect copying:")
+        print("       PRIVATE (never commit it — it is now git-ignored automatically).")
+        print("       To verify later or if you suspect copying:")
         print("         origin-canary verify --source . --manifest .canary/canary_manifest.json")
         print("       Re-run `opl_adopt --canary` on each release to refresh tokens.")
+        # G3: the missing recovery loop. Lose .canary/ and you lose the ability to
+        # litigate. Make the backup step explicit and non-optional-sounding.
+        print("    5. (Canary) BACK UP .canary/ NOW. It is the ONLY proof you can assert")
+        print("       ownership of copied code. If you lose it, you cannot prove theft.")
+        print("       Copy it to an encrypted store / password manager / offsite. A bare")
+        print("       `cp -r .canary /your/encrypted/backup/` is enough.")
+        # G4: contributor information flow. Contributors get tokens in source but
+        # no manifest; tell the maintainer to set expectations.
+        print("    Contributors: they receive canary tokens embedded in source but NOT")
+        print("      the private manifest. They can build/use the repo normally; they")
+        print("      just can't *verify* provenance (that needs the secret). Tell them")
+        print("      not to delete `canary_*` lines or the pre-push hook will flag it.")
     else:
         print("\n  To validate later, or if you suspect copying: run")
         print("     python3 tools/opl_check.py .            # tamper/local check")

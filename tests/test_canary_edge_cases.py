@@ -1218,3 +1218,27 @@ class TestCanaryCheckScript:
         # G2: pre-push hook installed and references canary verification
         hook = repo / ".git" / "hooks" / "pre-push"
         assert hook.exists() and "verify" in hook.read_text() and "opl_adopt --canary" in hook.read_text()
+
+    def test_opl_adopt_canary_surfaces_backup_and_contributor_guidance(self, tmp_path):
+        # G3/G4: the adopt output must tell the maintainer to BACK UP the secret
+        # (the missing recovery loop) and explain the contributor info flow.
+        import shutil as _sh
+        src = Path(os.environ.get("ORIGIN_TOOLS_REAL", "/home/ikaaros/Coding/Gold/origin-tools"))
+        if not src.is_dir():
+            pytest.skip("origin-tools real repo not present")
+        repo = tmp_path / "origin-tools"
+        _sh.copytree(src, repo, ignore=_sh.ignore_patterns("target", ".git", "node_modules"))
+        binp = Path.home() / "Coding" / "Gold" / "origin-tools" / "target" / "release" / "origin-canary"
+        if not binp.exists():
+            pytest.skip("origin-canary binary not built")
+        r = subprocess.run(
+            [sys.executable, str(Path(TOOLS_DIR) / "tools" / "opl_adopt.py"), str(repo),
+             "--maintainer", "T <t@t.dev>", "--jurisdiction", "United States",
+             "--terms-url", "https://t.dev/terms", "--opl-ai", "in", "--canary",
+             "--project-id", "7"],
+            capture_output=True, text=True, timeout=200)
+        assert r.returncode == 0, r.stderr[-400:]
+        out = r.stdout
+        assert "BACK UP" in out, "G3: backup/recovery guidance missing"
+        assert "Contributors" in out, "G4: contributor info flow missing"
+        assert "git-ignored" in out, "G1 reinforcement missing"
