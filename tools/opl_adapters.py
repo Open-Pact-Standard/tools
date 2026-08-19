@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from collections.abc import Callable
@@ -88,6 +89,79 @@ def origin_canary_bin() -> Path | None:
 # Adapters
 # ---------------------------------------------------------------------------
 
+# PROMOTED DEFAULT ADOPT PATH (closes F1/F2). Thin delegation to the hardened
+# opl_adopt.py spine — same args the future Studio widget passes. We do NOT
+# reimplement the spine here; we surface opl_adopt's own 5-step stdout + the
+# final VERDICT so the Studio/MCP expose the exact CLI behaviour.
+register(Adapter(
+    id="adopt-1cmd",
+    title="Adopt (one command)",
+    description="RECOMMENDED default. Run the hardened opl_adopt spine in one command: "
+                "detect license -> generate NOTICE -> inject SPDX -> swap LICENSE to "
+                "OPL text -> update manifests -> opl_check VERDICT. Calls opl_adopt.py "
+                "with the same args the Studio widget passes. Advanced/preview paths: "
+                "'adopt' (NOTICE + Custom LICENSE preview) and 'adopt-full' (full kit drive).",
+    params=[
+        Param("repo", "Repository path", "repo", "",
+              help="Required. The repo opl_adopt will write NOTICE/SPDX/LICENSE into."),
+        Param("maintainer", "Maintainer (name <email>)", "text", "",
+              help="Who maintains the work."),
+        Param("jurisdiction", "Governing Jurisdiction", "text", "United States",
+              help="Any jurisdiction — you write it. OPL §9.4 covers all."),
+        Param("terms_url", "Standard Terms URL", "text", "",
+              help="HTTPS page publishing your commercial-use pricing."),
+        Param("opl_ai", "OPL-AI addendum", "select", "out", ["out", "in"],
+              help="opt in to restrict AI training on your code."),
+        Param("abandonment", "Abandonment (months)", "number", "36",
+              help="Silence this long -> Work auto-converts to Apache-2.0."),
+        Param("dosp", "DOSP period (months, blank=none)", "number", "",
+              help="Scheduled auto-conversion to Apache-2.0 per version. Blank = never."),
+        Param("dry_run", "Dry run (no changes)", "bool", "false",
+              help="Show what opl_adopt would change without modifying files."),
+        Param("skip_check", "Skip final opl_check verdict", "bool", "false",
+              help="If true, opl_adopt skips the final opl_check at the end."),
+    ],
+    run=lambda root, p: _adopt_1cmd(root, p),
+))
+
+
+def _adopt_1cmd(root: Path | None, p: dict) -> AdapterResult:
+    """Run opl_adopt.py and surface its real stdout (5-step progress + VERDICT).
+
+    Deliberately a thin wrapper: the orchestration logic lives in opl_adopt.py,
+    not here, so the Studio and every agent harness get the identical hardened
+    path the CLI offers (no divergence, no reimplementation).
+    """
+    if not root or not root.is_dir():
+        return AdapterResult(False, {}, [f"Repository not found: {root}"])
+    args = [
+        str(root),
+        "--maintainer", p.get("maintainer", ""),
+        "--jurisdiction", p.get("jurisdiction") or "United States",
+        "--terms-url", p.get("terms_url", ""),
+        "--opl-ai", p.get("opl_ai", "out"),
+        "--abandonment", str(p.get("abandonment", "36")),
+        "--dosp", str(p.get("dosp", "")),
+    ]
+    if str(p.get("dry_run", "false")).lower() in ("1", "true", "on", "yes"):
+        args.append("--dry-run")
+    if str(p.get("skip_check", "false")).lower() in ("1", "true", "on", "yes"):
+        args.append("--skip-check")
+    rc, so, se = run_tool("opl_adopt.py", *args)
+    out = (so or "").strip()
+    if se and se.strip():
+        out = (out + "\n\n" + se.strip()).strip()
+    # The VERDICT line is part of opl_adopt's stdout; surface it as the consequence.
+    verdict = ""
+    for line in (so or "").splitlines():
+        if line.strip().startswith("VERDICT:"):
+            verdict = line.strip()
+            break
+    cons = (verdict or ("opl_adopt ran." if rc == 0
+                        else "opl_adopt reported a problem (see output)."))
+    return AdapterResult(rc == 0, {}, [out], consequence=cons)
+
+
 register(Adapter(
     id="adopt",
     title="Adopt OPL",
@@ -121,6 +195,9 @@ register(Adapter(
 
 
 def _adopt(root: Path | None, p: dict) -> AdapterResult:
+    """Adopt OPL via the hardened opl_adopt.py spine (NOTICE + SPDX + LICENSE
+    swap + manifest update + check). Delegates to the real tool rather than
+    reimplementing — this closes the F1/F2 adopt cliffs found in dogfooding."""
     write = str(p.get("write", "false")).lower() in ("1", "true", "on", "yes")
     jur = p.get("jurisdiction") or "United States"
     args = [
@@ -132,26 +209,38 @@ def _adopt(root: Path | None, p: dict) -> AdapterResult:
         "--abandonment", p.get("abandonment", "36"),
         "--dosp", p.get("dosp", ""),
         "--commercial-terms", "",
+        "--trademark", p.get("trademark", ""),
     ]
     if write and root:
-        rc, so, se = run_tool("opl_init.py", *args, "--output", str(root / "NOTICE"))
-        rc2, so2, _se2 = run_tool("opl_spdx_inject.py", str(root))
-        # Write the Custom OPL LICENSE to the repo root so the repo is compliant.
-        # Previously only NOTICE + SPDX headers were written and LICENSE was left
-        # as a "manual step" even though the adapter reported success — a real
-        # usability bug a pilot would hit immediately.
-        lic = _assemble_license(p, jur)
-        lic_written = False
-        if lic and not lic.startswith("(") and not lic.startswith("usage"):
-            (root / "LICENSE.md").write_text(lic, encoding="utf-8")
-            lic_written = True
-        ok = rc == 0 and rc2 == 0 and lic_written
-        parts = [so.strip(), so2.strip()]
-        if lic_written:
-            parts.append(f"Wrote LICENSE.md to {root}/")
+        # Run the orchestrated spine into the real repo, skipping the remote
+        # terms-URL check (adopted at adopt time; published after).
+        rc, so, se = run_tool("opl_adopt.py", str(root), *args, "--skip-check")
+        ok = rc == 0
+        parts = [so.strip(), se.strip()] if se.strip() else [so.strip()]
         return AdapterResult(ok, {}, parts,
-                            "Wrote NOTICE + LICENSE.md + injected SPDX headers into your repo.")
-    # Preview: emit NOTICE to a temp location and assemble a Custom OPL LICENSE.
+                            "Ran opl_adopt: NOTICE + SPDX + LICENSE swap + manifest update.")
+    # Preview: run opl_adopt against a temp copy so the user sees the result
+    # without mutating their repo.
+    import tempfile, shutil
+    if root and root.exists():
+        tmp = Path(tempfile.mkdtemp())
+        shutil.copytree(root, tmp / "preview", dirs_exist_ok=True)
+        rc, so, se = run_tool("opl_adopt.py", str(tmp / "preview"), *args, "--skip-check")
+        notice = ""
+        lic = ""
+        if (tmp / "preview" / "NOTICE").exists():
+            notice = (tmp / "preview" / "NOTICE").read_text()
+        lic_src = None
+        for n in ("LICENSE", "LICENSE.md"):
+            if (tmp / "preview" / n).exists():
+                lic_src = tmp / "preview" / n
+                break
+        if lic_src:
+            lic = lic_src.read_text()
+        cons = _consequence_text(p)
+        return AdapterResult(rc == 0, {"NOTICE": notice, "LICENSE (OPL-1.4)": lic},
+                             [], cons)
+    # No root: just preview the NOTICE/LICENSE text via opl_init + custom_opl.
     import tempfile
     tmp = Path(tempfile.mkdtemp())
     rc, so, se = run_tool("opl_init.py", *args, "--output", str(tmp / "NOTICE"))
@@ -708,6 +797,137 @@ def _adopt_full(root: Path | None, p: dict) -> AdapterResult:
     cons = "Repo written + validated: NOTICE + LICENSE.md + SPDX headers in place." \
         if scan_rc == 0 else "Written, but opl_check found issues — see opl_check output."
     return AdapterResult(write_res.ok, outputs, msg, cons)
+
+
+# ---------------------------------------------------------------------------
+# adopt-live — wraps the REAL hardened spine (tools/opl_adopt.py).
+# The dogfood doc (F1/F2) explicitly warns against reimplementing the adopt
+# chain in the UI. This adapter does NOT reimplement it: it clones a URL to a
+# temp dir (or uses a local path) and delegates every step to opl_adopt.py,
+# returning the generated NOTICE + a diff-ready summary. The browser widget
+# likewise never reimplements adopt logic — it only streams the spine's [N/5]
+# output. This is the Option-A deliverable's backend.
+# ---------------------------------------------------------------------------
+
+def clone_repo_to_temp(url: str) -> Path | None:
+    """Clone a public repo to a temp dir. The ONLY network call besides the
+    optional Standard Terms URL check. Returns the clone path or None."""
+    import shutil as _sh
+    import tempfile as _tf
+    if not url or not (url.startswith("http://") or url.startswith("https://")):
+        return None
+    dest = Path(_tf.mkdtemp(prefix="opl-adopt-"))
+    try:
+        p = subprocess.run(["git", "clone", "--depth", "1", url, str(dest)],
+                           capture_output=True, text=True, timeout=120)
+        return dest if p.returncode == 0 else None
+    except Exception:
+        return None
+
+
+def spine_argv(root: Path, p: dict) -> list[str]:
+    """Build the exact opl_adopt.py command line from widget params."""
+    return [
+        str(Path(__file__).parent / "opl_adopt.py"),
+        str(root),
+        "--maintainer", str(p.get("maintainer", "")),
+        "--jurisdiction", str(p.get("jurisdiction") or "United States"),
+        "--terms-url", str(p.get("terms_url", "")),
+        "--opl-ai", str(p.get("opl_ai", "out")),
+        "--abandonment", str(p.get("abandonment", "36")),
+        "--dosp", str(p.get("dosp", "")),
+    ]
+
+
+def _build_summary(root: Path, params: dict, source: str,
+                   steps: list, verdict: str) -> str:
+    lines = ["# OPL Adoption — diff-ready summary", "", f"- **Target:** `{root}`"]
+    lines.append(f"- **Source:** {'cloned URL (temp dir)' if source == 'url' else 'local path'}")
+    if steps:
+        lines.append("")
+        lines.append("**Steps performed by `opl_adopt.py`:**")
+        for s in steps:
+            lines.append(f"  {s['n']}. {s['label']}")
+    lic = root / "LICENSE"
+    if not lic.exists():
+        lic = root / "LICENSE.md"
+    swapped = False
+    if lic.exists():
+        t = lic.read_text(encoding="utf-8", errors="ignore")
+        swapped = ("Open-Pact" in t) or ("OPL-1.4" in t)
+    lines.append("")
+    lines.append(f"- **LICENSE:** {'swapped to OPL-1.4 text' if swapped else 'NOT swapped'}")
+    mani = [m for m in ("Cargo.toml", "pyproject.toml", "package.json", "setup.py")
+            if (root / m).exists()]
+    if mani:
+        lines.append(f"- **Manifests:** {', '.join(mani)} checked for `license` field")
+    lines.append(f"- **VERDICT:** {verdict or '(see output)'}")
+    return "\n".join(lines) + "\n"
+
+
+def _adopt_live(p: dict) -> AdapterResult:
+    source = p.get("source", "url")
+    root = None
+    if source == "path":
+        rp = (p.get("repo_path") or "").strip()
+        if rp and Path(rp).is_dir():
+            root = Path(rp)
+    else:
+        root = clone_repo_to_temp((p.get("repo_url") or "").strip())
+    if not root:
+        return AdapterResult(False, {}, [],
+            "Provide a valid repo URL (source=url) or an existing local path (source=path).")
+    try:
+        proc = subprocess.run([PY, *spine_argv(root, p)],
+                              capture_output=True, text=True, timeout=300)
+    except Exception as e:
+        return AdapterResult(False, {}, [], f"opl_adopt.py failed to run: {e}")
+    stdout, stderr = proc.stdout, proc.stderr
+    steps = [{"n": int(m.group(1)), "label": m.group(2).strip()}
+             for m in re.finditer(r"\[(\d)/5\]\s*(.*)", stdout)]
+    verdict = next((ln.split("VERDICT:", 1)[1].strip()
+                    for ln in stdout.splitlines() if ln.strip().startswith("VERDICT:")), "")
+    passed = errors = None
+    for ln in stdout.splitlines():
+        mm = re.search(r"(\d+)\s+passed,\s*(\d+)\s+errors", ln)
+        if mm:
+            passed, errors = int(mm.group(1)), int(mm.group(2))
+    notice = (root / "NOTICE").read_text(encoding="utf-8", errors="ignore") \
+        if (root / "NOTICE").exists() else stdout
+    summary = _build_summary(root, p, source, steps, verdict)
+    ok = proc.returncode == 0 and (errors == 0 if errors is not None else True)
+    return AdapterResult(ok, {
+        "NOTICE": notice,
+        "Diff summary": summary,
+        "steps": json.dumps(steps),
+        "verdict": verdict,
+    }, [], verdict or ("Adoption complete" if ok else "Errors reported"))
+
+
+register(Adapter(
+    id="adopt-live",
+    title="Adopt OPL — live (wraps opl_adopt.py)",
+    description="Run the real one-command spine (tools/opl_adopt.py) against a repo "
+                "URL or local path. Clones URL to temp, then delegates every step to "
+                "opl_adopt.py — no reimplemented logic. Returns NOTICE + diff summary.",
+    params=[
+        Param("source", "Source", "select", "url", ["url", "path"],
+              help="url = clone a public repo; path = use a local directory."),
+        Param("repo_url", "Repository URL", "text", "",
+              help="Public git URL (https) to clone."),
+        Param("repo_path", "Local repository path", "text", "",
+              help="Absolute path to a local repo directory."),
+        Param("maintainer", "Maintainer (name <email>)", "text", "",
+              help="Who maintains the work."),
+        Param("jurisdiction", "Governing Jurisdiction", "text", "United States"),
+        Param("terms_url", "Standard Terms URL", "text", "",
+              help="HTTPS page publishing commercial-use pricing."),
+        Param("opl_ai", "OPL-AI addendum", "select", "out", ["out", "in"]),
+        Param("abandonment", "Abandonment (months)", "number", "36"),
+        Param("dosp", "DOSP period (months, blank=none)", "number", ""),
+    ],
+    run=lambda root, p: _adopt_live(p),
+))
 
 
 def catalogue() -> list[dict]:
