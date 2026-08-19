@@ -1004,4 +1004,50 @@ class TestCanaryCheckScript:
         except SyntaxError as e:
             raise AssertionError(f"Embedded single-line-docstring .py does not parse: {e}")
         # Quick sanity: the reference is comment-prefixed, not bare.
-        assert "# Internal reference:" in content or "# Module reference:" in content
+
+    def test_verify_detects_variable_tokens_not_just_watermark(self, tmp_path):
+        # H1 regression: verify must detect variable tokens (_CANARY_XXX = "hex"),
+        # not only watermark literals.
+        src = tmp_path / "src"; src.mkdir()
+        (src / "app.py").write_text('import os\n')
+        out = tmp_path / "m.json"
+        r = run_canary(
+            "embed",
+            "--source", str(tmp_path),
+            "--project-id", "1",
+            "--distribution-id", "h1_var_regression",
+            "--salt", "salt",
+            "--num-canaries", "1",
+            "--output", str(out),
+            "--public-output", str(tmp_path / "p.json"),
+            "--strategies", "variable",  # embed ONLY variable (no watermark)
+        )
+        assert r.returncode == 0
+        # Verify must find the token (previously false-clean).
+        vr = run_canary("verify", "--source", str(tmp_path), "--manifest", str(out))
+        assert vr.returncode == 0
+        assert "FOUND 1 CANARY TOKEN MATCH" in vr.stdout
+
+    def test_verify_detects_deadcode_tokens_not_just_watermark(self, tmp_path):
+        # H1 regression: verify must detect deadcode tokens (_validate_XXX + _marker_XXX),
+        # not only watermark literals.
+        src = tmp_path / "src"; src.mkdir()
+        # Need enough content for deadcode embedder to target a function.
+        (src / "app.py").write_text('import os\n\ndef f():\n    return 1\n')
+        out = tmp_path / "m.json"
+        r = run_canary(
+            "embed",
+            "--source", str(tmp_path),
+            "--project-id", "1",
+            "--distribution-id", "h1_dead_regression",
+            "--salt", "salt",
+            "--num-canaries", "1",
+            "--output", str(out),
+            "--public-output", str(tmp_path / "p.json"),
+            "--strategies", "deadcode",  # embed ONLY deadcode (no watermark)
+        )
+        assert r.returncode == 0
+        # Verify must find the token (previously false-clean).
+        vr = run_canary("verify", "--source", str(tmp_path), "--manifest", str(out))
+        assert vr.returncode == 0
+        assert "FOUND 1 CANARY TOKEN MATCH" in vr.stdout

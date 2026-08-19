@@ -221,7 +221,7 @@ class WatermarkEmbedder:
 
         for i, line in enumerate(lines):
             if line.strip().startswith('"""') or line.strip().startswith("'''"):
-                lines.insert(i + 1, f"  Internal reference: {token}")
+                lines.insert(i + 1, f"# Internal reference: {token}")
                 target.write_text('\n'.join(lines), encoding='utf-8')
                 self.files_modified.append(relative)
                 return relative
@@ -293,6 +293,27 @@ class DeadCodeEmbedder:
         if path.name in SELF_EXCLUDED_FILENAMES:
             return True
         return bool(parts & EXCLUDED_DIRS)
+
+def _derive_variable_marker(secret: str) -> tuple[str, str]:
+    """
+    Derive the variable marker that VariableInjectionEmbedder creates from a token secret.
+    Returns (var_name, var_value) as it appears in the source, e.g.
+    ('_CANARY_ABC123DEF', 'bc7e6ec0bc0798c3') for secret 'canary_abc123def'.
+    """
+    var_name = secret.upper()
+    var_val = hashlib.sha3_256(secret.encode()).hexdigest()[:16]
+    return var_name, var_val
+
+def _derive_deadcode_marker(secret: str) -> tuple[str, str]:
+    """
+    Derive the deadcode marker that DeadCodeEmbedder creates from a token secret.
+    Returns (func_name, marker_name) as they appear in the source, e.g.
+    ('_validate_bc7e', '_marker_bc7e6ec0') for secret 'canary_abc123def'.
+    """
+    magic_val = hashlib.sha3_256(secret.encode()).hexdigest()[:8]
+    func_name = f"_validate_{magic_val[:4]}"
+    marker_name = f"_marker_{magic_val}"
+    return func_name, marker_name
 
 class CanaryEmbedder:
     def __init__(self, project_id: int, distribution_id: str, salt: str, strategies: list[str] | None = None, num_canaries: int = 10) -> None:
@@ -375,14 +396,41 @@ class CanaryEmbedder:
         return self._hash_tree(source_dir)
 
     def verify_source(self, source_dir: Path, manifest: CanaryManifest) -> list[tuple[str, str]]:
+        """
+        Scan the source tree for canary markers using all three embedding strategies.
+
+        Returns a list of (relative_path, secret) for each token found. A token is
+        considered present if ANY of its derived markers appear:
+          - Watermark: the literal secret (e.g., "canary_abc123") appears in content.
+          - Variable: _{SECRET_UPPER} = "16-char hex" appears (from VariableInjectionEmbedder).
+          - Deadcode: _validate_{4-char hex} + _marker_{8-char hex} appear (from DeadCodeEmbedder).
+        This fixes the HIGH H1 gap where variable/deadcode tokens were invisible to verify.
+        """
         matches = []
         for token_data in manifest.canary_tokens:
             secret = token_data.secret
+            # Derive variable and deadcode markers for this token.
+            var_name, var_val = _derive_variable_marker(secret)
+            func_name, marker_name = _derive_deadcode_marker(secret)
+
             for f in source_dir.rglob('*'):
                 if f.is_file() and f.suffix in SUPPORTED_EXTENSIONS:
                     try:
                         content = f.read_text(encoding='utf-8', errors='replace')
+                        # Watermark detection: literal secret in content.
                         if secret in content:
+                            rel = str(f.relative_to(source_dir))
+                            matches.append((rel, secret))
+                            continue  # no need to check other markers for this file
+                        # Variable detection: _CANARY_XXX = "hex" (Python, JS, etc.)
+                        # The template is: f'_{TOKEN} = "{TOKEN_VAL}"  # Internal config marker'
+                        if f'_{var_name} = "{var_val}"' in content:
+                            rel = str(f.relative_to(source_dir))
+                            matches.append((rel, secret))
+                            continue
+                        # Deadcode detection: _validate_XXXX and _marker_XXXXXXX appear.
+                        # The injected block includes both markers; require both for robustness.
+                        if func_name in content and marker_name in content:
                             rel = str(f.relative_to(source_dir))
                             matches.append((rel, secret))
                     except Exception:
