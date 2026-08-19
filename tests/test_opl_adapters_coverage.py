@@ -194,7 +194,7 @@ class TestAdoptFull:
         assert res.ok is True
         assert (tmp_path / "LICENSE").exists()
         assert (tmp_path / "NOTICE").exists()
-        assert "Customization Schedule" in (tmp_path / "LICENSE.md").read_text()
+        assert "Open-Pact License" in (tmp_path / "LICENSE").read_text()
 
 
 class TestMigrate:
