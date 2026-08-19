@@ -184,7 +184,7 @@ class TestVersionConsistency:
             assert has_fstring, f"{fp.name}: should use __version__ f-string"
             assert not has_hardcoded, f"{fp.name}: still has hardcoded version"
             tools_ok.append(fp.name)
-        assert len(tools_ok) == 6, f"Expected 6 tools, found {len(tools_ok)}: {tools_ok}"
+        assert len(tools_ok) == 7, f"Expected 7 tools, found {len(tools_ok)}: {tools_ok}"
 
     def test_init_version_is_defined(self):
         """_version.py should define __version__ as a valid X.Y or X.Y.Z string."""

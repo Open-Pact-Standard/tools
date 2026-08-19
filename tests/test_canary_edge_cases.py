@@ -1097,3 +1097,30 @@ class TestCanaryCheckScript:
         assert vr.returncode == 0
         # Should find 1 token (the same token embedded with all three strategies).
         assert "FOUND 1 CANARY TOKEN MATCH" in vr.stdout
+
+
+    def test_opl_adopt_makes_repo_self_consistent(self, tmp_path):
+        # Adopt-flow dogfood (F1/F2): one command must end in a self-consistent
+        # repo (LICENSE swapped to OPL, manifests updated, check green) -- not the
+        # previous state where LICENSE stayed Apache and opl_check warned.
+        # Use a tiny fake project.
+        (tmp_path / "LICENSE").write_text("Apache License\nVersion 2.0\n")
+        (tmp_path / "Cargo.toml").write_text('[package]\nname = "demo"\nlicense = "Apache-2.0"\n')
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "lib.rs").write_text("pub fn x() {}\n")
+        adopt = Path(__file__).parent.parent / "tools" / "opl_adopt.py"
+        r = subprocess.run(
+            [sys.executable, str(adopt), str(tmp_path),
+             "--maintainer", "Test <t@e.com>",
+             "--jurisdiction", "United States",
+             "--terms-url", "https://example.com/terms"],
+            capture_output=True, text=True, timeout=60)
+        assert r.returncode == 0, r.stderr
+        # LICENSE now references OPL
+        lic = (tmp_path / "LICENSE").read_text()
+        assert "Open-Pact License" in lic, "LICENSE was not swapped to OPL"
+        # Cargo.toml license field updated
+        cargo = (tmp_path / "Cargo.toml").read_text()
+        assert 'license = "OPL-1.4"' in cargo, "manifest license not updated"
+        # Final check reports self-consistency
+        assert "5 passed" in r.stdout and "0 errors" in r.stdout
