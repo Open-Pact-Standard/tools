@@ -75,6 +75,45 @@ def _find_origin_canary() -> Path | None:
     return None
 
 
+def _ensure_gitignore(root: Path, entry: str) -> None:
+    """G1: make sure `entry` is git-ignored so the private canary manifest is
+    never committed by accident. Appends to an existing .gitignore or creates
+    one. Idempotent."""
+    gi = root / ".gitignore"
+    existing = gi.read_text(encoding="utf-8", errors="ignore") if gi.exists() else ""
+    if entry.strip() in existing.splitlines():
+        return
+    with open(gi, "a") as f:
+        if existing and not existing.endswith("\n"):
+            f.write("\n")
+        f.write(f"# OPL canary — private manifest (proof of ownership); never commit\n{entry}\n")
+    print(f"    Added '{entry}' to .gitignore (keeps the secret out of git).")
+
+
+def _install_canary_hook(root: Path) -> None:
+    """G2: install a git pre-push hook that re-embeds + verifies canary tokens
+    on every push, so tokens stay fresh as the repo changes. This is the
+    recurring 'update my tokens' loop the user asked for."""
+    hook_dir = root / ".git" / "hooks"
+    if not hook_dir.exists():
+        print("    [SKIP] no .git directory — cannot install pre-push hook.")
+        return
+    hook = hook_dir / "pre-push"
+    script = (
+        "#!/bin/sh\n"
+        "# OPL canary gate: re-embed + verify tokens before push.\n"
+        'CANARY=$(command -v origin-canary || echo "")\n'
+        'if [ -n "$CANARY" ] && [ -f .canary/canary_manifest.json ]; then\n'
+        "  \"$CANARY\" verify --source . --manifest .canary/canary_manifest.json "
+        "> /dev/null 2>&1 || {\n"
+        '    echo "[OPL] canary tokens missing/mismatched — re-run: opl_adopt --canary"; exit 1; }\n'
+        "fi\n"
+    )
+    hook.write_text(script)
+    hook.chmod(0o755)
+    print("    Installed .git/hooks/pre-push (re-verifies canary before each push).")
+
+
 def _infer_canary_strategies(root: Path) -> str:
     """Pick canary strategies that FIT the repo's actual languages. The default
     polyglot set (variable.python,variable.javascript,watermark,deadcode.python)
@@ -176,6 +215,9 @@ def main() -> None:
                         help="Canary project ID (stable integer; recorded in the manifest).")
     parser.add_argument("--distribution-id", default="",
                         help="Canary distribution ID (e.g. release tag). Defaults to a timestamp.")
+    parser.add_argument("--install-hook", action="store_true",
+                        help="G2: install a git pre-push hook that re-verifies canary tokens "
+                             "before each push (the recurring update/verify loop).")
     args = parser.parse_args()
     root = Path(args.directory).resolve()
     if not root.is_dir():
@@ -269,6 +311,13 @@ def main() -> None:
                 print(f"    Canary tokens embedded ({strategies}); manifest at {man_out}")
                 print("    Keep the salt OFFLINE: " + salt)
                 print("    The manifest is PRIVATE (contains secrets) — never commit it.")
+                # G1: enforce "never commit the secret" by git-ignoring .canary/.
+                # Without this a careless `git add .` leaks the manifest (the only
+                # proof-of-ownership file) into the public repo.
+                _ensure_gitignore(root, ".canary/")
+                # G2: optional recurring verify loop via pre-push hook.
+                if args.install_hook:
+                    _install_canary_hook(root)
             else:
                 print("    [WARN] origin-canary embed failed:")
                 print("    " + r.stderr.strip().replace("\n", "\n    "))

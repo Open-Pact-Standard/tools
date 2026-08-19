@@ -1189,3 +1189,32 @@ class TestCanaryCheckScript:
         rc = subprocess.run([sys.executable, str(Path(TOOLS_DIR) / "tools" / "opl_check.py"),
                              str(repo), "--skip-remote"], capture_output=True, text=True, timeout=30)
         assert "0 errors" in rc.stdout, rc.stdout
+
+    def test_opl_adopt_canary_gitignores_manifest_and_offers_hook(self, tmp_path):
+        # G1/G2: --canary must protect the secret (gitignore) and optionally
+        # install the recurring verify hook. Verified on a real git repo.
+        import shutil as _sh
+        src = Path(os.environ.get("ORIGIN_TOOLS_REAL", "/home/ikaaros/Coding/Gold/origin-tools"))
+        if not src.is_dir():
+            pytest.skip("origin-tools real repo not present")
+        repo = tmp_path / "origin-tools"
+        _sh.copytree(src, repo, ignore=_sh.ignore_patterns("target", ".git", "node_modules"))
+        subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+        subprocess.run(["git", "config", "user.email", "t@t.dev"], cwd=repo, check=True)
+        subprocess.run(["git", "config", "user.name", "t"], cwd=repo, check=True)
+        binp = Path.home() / "Coding" / "Gold" / "origin-tools" / "target" / "release" / "origin-canary"
+        if not binp.exists():
+            pytest.skip("origin-canary binary not built")
+        r = subprocess.run(
+            [sys.executable, str(Path(TOOLS_DIR) / "tools" / "opl_adopt.py"), str(repo),
+             "--maintainer", "T <t@t.dev>", "--jurisdiction", "United States",
+             "--terms-url", "https://t.dev/terms", "--opl-ai", "in", "--canary",
+             "--project-id", "7", "--install-hook"],
+            capture_output=True, text=True, timeout=200)
+        assert r.returncode == 0, r.stderr[-400:]
+        # G1: .canary/ is git-ignored (secret cannot be committed by accident)
+        gi = repo / ".gitignore"
+        assert gi.exists() and ".canary/" in gi.read_text()
+        # G2: pre-push hook installed and references canary verification
+        hook = repo / ".git" / "hooks" / "pre-push"
+        assert hook.exists() and "verify" in hook.read_text() and "opl_adopt --canary" in hook.read_text()

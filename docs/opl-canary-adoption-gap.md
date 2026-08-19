@@ -49,3 +49,31 @@ The system is **brittle for the adopter**: the license's own OPL-AI clause impli
 use, but the adopt flow delivers none. A user who adopts and stops has a license with a
 promise (OPL-AI enforcement) they cannot fulfill because the tool never created the tokens.
 That is the gap you felt.
+
+## Resolved this cycle (2026-08-19, build pass)
+
+- **G1 (LP#6, CRITICAL):** `opl_adopt --canary` now appends `.canary/` to
+  `.gitignore` (creating it if needed). The proof-of-ownership manifest can no
+  longer be committed by a careless `git add .`. Verified: git reports `.canary/`
+  as ignored.
+- **G2 (LP#6, HIGH):** `opl_adopt --canary --install-hook` installs a
+  `.git/hooks/pre-push` that re-verifies canary tokens before every push — the
+  recurring "update my tokens as I change the repo" loop the user asked for.
+- **C1/C2 (prior):** `--canary` embeds via origin-canary with language-fit
+  strategies; `opl_check` excludes dot-dirs at any depth.
+
+## Remaining gaps (not yet closed)
+
+- **G3 (LP#8):** no backup/recovery path for the salt+manifest. Lose `.canary/`
+  and you lose the ability to litigate. Needs: encrypted offsite backup guidance
+  or a re-derivable scheme. Single point of failure.
+- **G4 (LP#6):** no contributor story. A contributor who clones gets tokens in
+  source but no manifest and no guidance; they can't verify and may silently
+  break a token. Needs a CONTRIBUTING note + a `opl_check` mode that tolerates
+  missing manifest.
+- **G5 (LP#3):** site/Studio still frame canary as a separate "enforce" feature,
+  not part of the adoption journey. Reinforce in copy.
+- **Q4 answer (local-only, by design):** origin-canary has NO git/remote/sync in
+  any command. Everything (tokens-in-source, manifest, JSONL ledger) is local.
+  Provenance proof is only as durable as your local `.canary/` folder. This is a
+  privacy feature, but it means the user must back up `.canary/` themselves.
