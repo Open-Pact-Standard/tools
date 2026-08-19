@@ -381,6 +381,177 @@ class TestCanary:
         ids = [a["id"] for a in adapters.catalogue()]
         assert "canary" in ids
 
+    # A fake origin-canary binary so the sign-path behaviour is tested deterministically
+    # without depending on the real Rust binary or a real identity blob.
+    @staticmethod
+    def _stub_bin(tmp_path):
+        stub = tmp_path / "origin-canary"
+        stub.write_text(
+            "#!/usr/bin/env python3\n"
+            "import sys, json\n"
+            "args = sys.argv[1:]\n"
+            "def val(flag):\n"
+            "    return args[args.index(flag)+1] if flag in args else None\n"
+            "cmd = sys.argv[0]\n"
+            "if len(args) and args[0] == 'embed':\n"
+            "    out = val('--manifest-out'); n = val('--num-canaries') or '2'\n"
+            "    # plant a token so the repo genuinely changes\n"
+            "    src = val('--source')\n"
+            "    import glob\n"
+            "    for f in glob.glob(src + '/**/*.py', recursive=True):\n"
+            "        open(f, 'a').write('canary_stub_token\\n')\n"
+            "    json.dump({'token_count': int(n), 'project_id': 1, 'merkle_root': 'stub'},\n"
+            "              open(out, 'w'), indent=2)\n"
+            "    print('Files modified'); print('Manifest: ' + out)\n"
+            "    sys.exit(0)\n"
+            "if len(args) and args[0] == 'sign':\n"
+            "    pf = val('--passphrase-file'); out = val('--out')\n"
+            "    if pf is None:\n"
+            "        print('error: passphrase prompt failed: no tty', file=sys.stderr)\n"
+            "        sys.exit(1)\n"
+            "    if 'WRONG' in open(pf).read():\n"
+            "        print('error: decryption failed (wrong passphrase or corrupted blob): x', file=sys.stderr)\n"
+            "        sys.exit(1)\n"
+            "    if 'GENERIC' in open(pf).read():\n"
+            "        print('error: no such commitment type', file=sys.stderr)\n"
+            "        sys.exit(1)\n"
+            "    json.dump({'signed': True}, open(out, 'w'))\n"
+            "    print('Commitment signed.')\n"
+            "    sys.exit(0)\n"
+            "sys.exit(2)\n"
+            ,
+            encoding="utf-8",
+        )
+        stub.chmod(0o755)
+        return stub
+
+    def _repo(self, tmp_path):
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "a.py").write_text("x = 1\n")
+        return tmp_path
+
+    def _stub_canary_params(self, **kw):
+        params = {"distribution_id": "v1.0", "project_id": "1", "num_canaries": "2"}
+        params.update(kw)
+        return params
+
+    def test_sign_requires_passphrase_file_fast_fail(self, tmp_path, monkeypatch):
+        # sign=true + identity but no passphrase file must fail fast with a clear, actionable
+        # message and must NOT touch the repo (no embed, no tokens planted).
+        repo = self._repo(tmp_path)
+        stub = self._stub_bin(tmp_path)
+        monkeypatch.setattr(adapters, "origin_canary_bin", lambda: stub)
+        ident = tmp_path / "my.id"
+        ident.write_bytes(b"fake-blob")
+        res = adapters.run_adapter("canary", repo, self._stub_canary_params(
+            sign="true", identity=str(ident)))
+        assert not res.ok
+        assert any("requires --passphrase_file" in m for m in res.messages)
+        # no embed ran -> repo unmodified
+        assert "canary_stub_token" not in (repo / "src" / "a.py").read_text()
+
+    def test_sign_success_writes_commitment_in_repo(self, tmp_path, monkeypatch):
+        repo = self._repo(tmp_path)
+        stub = self._stub_bin(tmp_path)
+        monkeypatch.setattr(adapters, "origin_canary_bin", lambda: stub)
+        ident = tmp_path / "my.id"
+        ident.write_bytes(b"fake-blob")
+        pf = tmp_path / "pass.txt"
+        pf.write_text("correct-passphrase\n")
+        res = adapters.run_adapter("canary", repo, self._stub_canary_params(
+            sign="true", identity=str(ident), passphrase_file=str(pf)))
+        assert res.ok is True
+        # commitment is written IN the repo (beside the manifest), never the harness CWD
+        assert "commitment" in res.outputs
+        commit = Path(res.outputs["commitment"])
+        assert commit.exists()
+        assert str(repo) in str(commit) or ".." not in str(commit.relative_to(repo))
+        assert "signed" in res.consequence
+
+    def test_sign_wrong_passphrase_clear_message_no_partial(self, tmp_path, monkeypatch):
+        repo = self._repo(tmp_path)
+        stub = self._stub_bin(tmp_path)
+        monkeypatch.setattr(adapters, "origin_canary_bin", lambda: stub)
+        ident = tmp_path / "my.id"
+        ident.write_bytes(b"fake-blob")
+        pf = tmp_path / "pass.txt"
+        pf.write_text("WRONG-passphrase\n")
+        res = adapters.run_adapter("canary", repo, self._stub_canary_params(
+            sign="true", identity=str(ident), passphrase_file=str(pf)))
+        assert not res.ok
+        assert "wrong passphrase" in res.consequence.lower() or "decryption failed" in res.consequence.lower()
+        # embed succeeded (manifest + tokens) but NO partial commitment written
+        assert (repo / ".canary" / "canary_manifest.json").exists()
+        assert not (repo / ".canary" / "canary_commitment.json").exists()
+        assert "embedded-but-unsigned" in res.consequence
+
+    def test_sign_skip_when_no_identity(self, tmp_path, monkeypatch):
+        repo = self._repo(tmp_path)
+        stub = self._stub_bin(tmp_path)
+        monkeypatch.setattr(adapters, "origin_canary_bin", lambda: stub)
+        res = adapters.run_adapter("canary", repo, self._stub_canary_params(sign="true"))
+        assert res.ok is True
+        assert "skipped" in res.consequence
+
+    def test_sign_false_is_embed_only(self, tmp_path, monkeypatch):
+        repo = self._repo(tmp_path)
+        stub = self._stub_bin(tmp_path)
+        monkeypatch.setattr(adapters, "origin_canary_bin", lambda: stub)
+        res = adapters.run_adapter("canary", repo, self._stub_canary_params(sign="false"))
+        assert res.ok is True
+        assert "embed-only" in res.consequence
+
+    def test_sign_generic_failure_surfaces_stderr(self, tmp_path, monkeypatch):
+        # A sign failure that is NOT a passphrase problem must surface the binary's stderr
+        # as the reason (clear message, no traceback), and still report embedded-but-unsigned.
+        repo = self._repo(tmp_path)
+        stub = self._stub_bin(tmp_path)
+        monkeypatch.setattr(adapters, "origin_canary_bin", lambda: stub)
+        ident = tmp_path / "my.id"
+        ident.write_bytes(b"fake-blob")
+        pf = tmp_path / "pass.txt"
+        pf.write_text("GENERIC error path\n")
+        res = adapters.run_adapter("canary", repo, self._stub_canary_params(
+            sign="true", identity=str(ident), passphrase_file=str(pf)))
+        assert not res.ok
+        assert "embedded-but-unsigned" in res.consequence
+        assert "origin-canary sign exited non-zero" in res.consequence or "no such commitment type" in res.consequence
+
+    def test_sign_subprocess_exception_is_clean(self, tmp_path, monkeypatch):
+        # A spawn/timeout error while signing must surface as a clean message, not a traceback.
+        repo = self._repo(tmp_path)
+        stub = self._stub_bin(tmp_path)
+        monkeypatch.setattr(adapters, "origin_canary_bin", lambda: stub)
+        # force subprocess.run to raise on the sign call (embed succeeds first)
+        import subprocess as sp
+        real_run = sp.run
+        def flaky(cmd, **kw):
+            if "sign" in (cmd[1] if len(cmd) > 1 else ""):
+                raise RuntimeError("spawn failed")
+            return real_run(cmd, **kw)
+        monkeypatch.setattr(sp, "run", flaky)
+        ident = tmp_path / "my.id"
+        ident.write_bytes(b"fake-blob")
+        pf = tmp_path / "pass.txt"
+        pf.write_text("correct\n")
+        res = adapters.run_adapter("canary", repo, self._stub_canary_params(
+            sign="true", identity=str(ident), passphrase_file=str(pf)))
+        assert not res.ok
+        assert "embedded-but-unsigned" in res.consequence
+
+
+class TestCanaryCliParams:
+    def test_parse_sign_params(self):
+        _aid, params = adapters._cli_argv_params([
+            "--run", "canary", "--repo", "/tmp/x", "--distribution_id", "v1.0",
+            "--sign", "true", "--identity", "/i/id", "--passphrase_file", "/p/pass",
+            "--commitment_path", ".canary/c.json",
+        ])
+        assert params["sign"] == "true"
+        assert params["identity"] == "/i/id"
+        assert params["passphrase_file"] == "/p/pass"
+        assert params["commitment_path"] == ".canary/c.json"
+
     def test_missing_binary_clear_message(self, tmp_path, monkeypatch):
         # No origin-canary binary -> clean guidance, not a crash.
         monkeypatch.setattr(adapters, "origin_canary_bin", lambda: None)

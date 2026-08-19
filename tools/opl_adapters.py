@@ -354,11 +354,24 @@ register(Adapter(
         Param("num_canaries", "Number of canary tokens", "number", "10",
               help="Tokens need distinct insert sites; a small repo may not fit 10. "
                    "Lower this if embed reports 'only embedded N of 10'."),
+        Param("strategies", "Embed strategies (comma-separated)", "text",
+              "variable.python,variable.javascript,watermark,deadcode.python",
+              help="Which embed strategies to cycle. A single-language tree often needs an "
+                   "override matching its language, e.g. variable.python,deadcode.python "
+                   "for a Python-only repo — otherwise embed can fail with 'not enough "
+                   "eligible files' (no JS/JSX file to inject into)."),
         Param("sign", "Sign fingerprint (post-quantum hybrid)", "bool", "false",
               help="If true and origin-canary is present, sign the Merkle root with the "
                    "creator's hybrid Ed25519+Falcon-1024 identity."),
         Param("identity", "Encrypted identity blob (path)", "text", "",
               help="Path to the identity from `origin identity keygen` (required if sign=true)."),
+        Param("passphrase_file", "Identity passphrase file (path)", "text", "",
+              help="Required to sign from the Studio/harness: origin-canary's interactive "
+                   "passphrase prompt cannot run in a non-tty context, so signing needs the "
+                   "passphrase as a file (mkdir -m700; single line, keep offline)."),
+        Param("commitment_path", "Signed commitment output path", "text", ".canary/canary_commitment.json",
+              help="Where the signed commitment is written. Defaults beside the manifest so the "
+                   "repo stays self-consistent and verify-commitment works in-place."),
     ],
     run=lambda root, p: _canary(root, p),
 ))
@@ -377,6 +390,21 @@ def _canary(root: Path | None, p: dict) -> AdapterResult:
     dist = p.get("distribution_id") or ""
     if not dist:
         return AdapterResult(False, {}, ["distribution_id is required (e.g. v1.0.0 or a git tag)."])
+    sign_on = str(p.get("sign", "false")).lower() in ("1", "true", "on", "yes")
+    identity = (p.get("identity") or "").strip()
+    pass_file = (p.get("passphrase_file") or "").strip()
+    # Fail fast BEFORE any embed: an interactive passphrase prompt cannot run through the
+    # Studio/harness (non-tty), so sign-with-identity always needs a passphrase file. Catching
+    # this here avoids burning a wasted embed run and leaving a touched tree.
+    if sign_on and identity and not pass_file:
+        return AdapterResult(
+            False, {},
+            ["sign=true with --identity requires --passphrase_file. origin-canary's interactive "
+             "passphrase prompt cannot run in the Studio/harness (non-tty), so signing needs the "
+             "passphrase as a file (mkdir -m700; single line; keep offline). Provide it and re-run. "
+             "Failed fast — the repo was not touched."],
+            consequence="Not run: signing requested (sign=true, identity given) without a passphrase "
+                        "file, which cannot work in a non-tty harness. No embed happened; repo unmodified.")
     manifest = p.get("manifest_path") or ".canary/canary_manifest.json"
     # origin-canary embeds tokens THEN writes the manifest; if the output dir
     # doesn't exist it errors after polluting the source with tokens. Pre-create
@@ -392,7 +420,8 @@ def _canary(root: Path | None, p: dict) -> AdapterResult:
         msgs_extra = []
     cmd = [str(bin_), "embed", "--source", str(root),
            "--project-id", pid, "--distribution-id", dist, "--manifest-out", str(manifest_abs),
-           "--salt", salt, "--num-canaries", str(p.get("num_canaries") or "10")]
+           "--salt", salt, "--num-canaries", str(p.get("num_canaries") or "10"),
+           "--strategies", str(p.get("strategies") or "variable.python,variable.javascript,watermark,deadcode.python")]
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
     except Exception as e:
@@ -417,18 +446,53 @@ def _canary(root: Path | None, p: dict) -> AdapterResult:
 
     # Optional post-quantum hybrid signing of the fingerprint.
     consequence = "Canaries embedded + manifest written. "
-    if str(p.get("sign", "false")).lower() in ("1", "true", "on") and p.get("identity"):
-        sig = subprocess.run([str(bin_), "sign", "--manifest", str(manifest_abs),
-                              "--identity", p["identity"]],
-                             capture_output=True, text=True, timeout=120)
+    outputs = {"origin_canary": out, "manifest": str(manifest_abs)}
+    if sign_on and identity:
+        # Write the signed commitment BESIDE the manifest (in-repo), never the caller's
+        # CWD — otherwise the commitment silently lands wherever the harness ran and the
+        # repo looks unsigned/self-inconsistent. origin-canary writes it atomically on
+        # success, so a failed sign leaves NO partial commitment file.
+        commit_abs = (root / (p.get("commitment_path") or ".canary/canary_commitment.json")
+                      if not Path(p.get("commitment_path") or "").is_absolute()
+                      else Path(p.get("commitment_path") or ".canary/canary_commitment.json"))
+        commit_abs.parent.mkdir(parents=True, exist_ok=True)
+        sign_cmd = [str(bin_), "sign", "--manifest", str(manifest_abs),
+                    "--identity", identity, "--out", str(commit_abs)]
+        if pass_file:
+            sign_cmd += ["--passphrase-file", pass_file]
+        try:
+            sig = subprocess.run(sign_cmd, capture_output=True, text=True, timeout=120)
+        except Exception as e:
+            # Signing finished embed's job; only the optional signature is missing.
+            return AdapterResult(
+                False, outputs, msgs,
+                consequence=("Canaries embedded + manifest written (valid, verifiable), but "
+                             f"signing could not be run: {e}. The tree is embedded-but-unsigned, "
+                             "not corrupted. Fix the sign arguments and re-run."))
         if sig.returncode == 0:
-            consequence += "Release fingerprint signed (hybrid Ed25519 + Falcon-1024)."
+            consequence += ("Release fingerprint signed (hybrid Ed25519 + Falcon-1024). "
+                            f"Commitment at <repo>/{commit_abs.relative_to(root)}. Verify in-place: "
+                            f"origin-canary verify-commitment -c <repo>/{commit_abs.relative_to(root)}")
+            outputs["commitment"] = str(commit_abs)
         else:
-            consequence += f"Signing failed: {sig.stderr.strip() or 'sign exited non-zero'}."
-    elif str(p.get("sign", "false")).lower() in ("1", "true", "on"):
-        consequence += "sign=true but no identity path given — skipped signing."
-    return AdapterResult(True, {"origin_canary": out, "manifest": str(manifest_abs)}, msgs,
-                         consequence=consequence)
+            # Surface a clear, actionable reason rather than a raw traceback or bare non-zero.
+            err = (sig.stderr or "").strip()
+            if "passphrase" in err.lower() or "decryption failed" in err.lower():
+                reason = "wrong passphrase (or corrupt identity blob) — 'decryption failed'"
+            else:
+                reason = err or "origin-canary sign exited non-zero"
+            return AdapterResult(
+                False, outputs, msgs,
+                consequence=("Canaries embedded + manifest written (valid, verifiable), but "
+                             f"SIGNING FAILED — the tree is embedded-but-unsigned, not "
+                             f"half-signed. Reason: {reason}. Provide the correct "
+                             "--passphrase_file and re-run; no partial commitment was written "
+                             "(origin-canary only writes on success)."))
+    elif sign_on:
+        consequence += "sign=true but no identity path given — signing skipped (embed-only)."
+    else:
+        consequence += "sign=false — embed-only (no post-quantum signature)."
+    return AdapterResult(True, outputs, msgs, consequence=consequence)
 
 
 def _scan(root: Path | None, p: dict) -> AdapterResult:
@@ -693,9 +757,15 @@ def _cli_argv_params(argv: list[str]) -> tuple[str, dict]:
     p.add_argument("--manifest_path", default=".canary/canary_manifest.json", help="canary: output manifest path.")
     p.add_argument("--salt", default="", help="canary: per-distribution salt hex (blank = auto-generate).")
     p.add_argument("--num_canaries", default="10", help="canary: number of canary tokens to embed.")
+    p.add_argument("--strategies", default="variable.python,variable.javascript,watermark,deadcode.python",
+                   help="canary: comma-separated embed strategies (override for single-language trees).")
     p.add_argument("--sign", default="false", help="canary: true to sign fingerprint with origin-canary identity.")
     p.add_argument("--identity", default="",
                    help="canary: path to encrypted identity blob (from `origin identity keygen`).")
+    p.add_argument("--passphrase_file", default="",
+                   help="canary: path to the identity passphrase file (required to sign non-interactively).")
+    p.add_argument("--commitment_path", default=".canary/canary_commitment.json",
+                   help="canary: output path for the signed commitment (default beside the manifest).")
     args = p.parse_args(argv)
     params = {
         "repo": args.repo,
@@ -724,8 +794,11 @@ def _cli_argv_params(argv: list[str]) -> tuple[str, dict]:
         "manifest_path": args.manifest_path,
         "salt": args.salt,
         "num_canaries": args.num_canaries,
+        "strategies": args.strategies,
         "sign": args.sign,
         "identity": args.identity,
+        "passphrase_file": args.passphrase_file,
+        "commitment_path": args.commitment_path,
     }
     return args.run, params
 

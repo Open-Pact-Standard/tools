@@ -5,6 +5,7 @@ canary_embedder.py, cicd_pipeline.py, js_embedder.py
 from __future__ import annotations
 
 import json
+import os
 import random
 import shutil
 import subprocess
@@ -21,6 +22,14 @@ def run_canary(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
         [sys.executable, str(Path(TOOLS_DIR) / "canary_embedder.py"), *args],
         capture_output=True, text=True, cwd=TOOLS_DIR,
+    )
+
+
+def run_canary_env(env: dict, *args: str) -> subprocess.CompletedProcess:
+    """Run canary_embedder.py with an explicit environment (e.g. a PATH shim)."""
+    return subprocess.run(
+        [sys.executable, str(Path(TOOLS_DIR) / "canary_embedder.py"), *args],
+        capture_output=True, text=True, cwd=TOOLS_DIR, env=env,
     )
 
 
@@ -478,6 +487,186 @@ class TestCanaryCLIEdgeCases:
         d = json.loads(ev.read_text())
         assert d["gate"] == "merkle-proof"
         assert all(m["merkle_proven"] for m in d["matches"])
+
+
+# ---------------------------------------------------------------------------
+# W4 integrity decisions: renamed-copy content proof, hunt false-safety,
+# signed-commitment binding. See docs/W4-integrity-decisions.md.
+# ---------------------------------------------------------------------------
+
+class TestW4IntegrityDecisions:
+    def test_evidence_renamed_copy_is_content_identical(self, tmp_path):
+        """Decision 1: a byte-identical copy under a DIFFERENT path (the common
+        theft/rename case) must not be degraded to a bare lead. sha3_256 hash
+        equality with a recorded release file is provable, so it becomes
+        content_identical + identical_to, distinct from merkle_proven."""
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "core.py").write_text("def init(): return 1\n")
+        priv = tmp_path / "priv.json"
+        r = run_canary("embed", "--source", str(tmp_path), "--project-id", "10",
+                       "--distribution-id", "rn", "--num-canaries", "2",
+                       "--output", str(priv), "--public-output", str(tmp_path / "pub.json"))
+        assert r.returncode == 0
+        # renamed copy: identical bytes, different relative path (core.py -> renamed.py)
+        vsrc = tmp_path / "victim_src"
+        vsrc.mkdir()
+        shutil.copy2(tmp_path / "src" / "core.py", vsrc / "renamed.py")
+        ev = tmp_path / "ev_rn.json"
+        r = run_canary("evidence", "--manifest", str(priv), "--suspect-source", str(vsrc),
+                       "--output", str(ev))
+        assert r.returncode == 0
+        d = json.loads(ev.read_text())
+        assert d["gate"] == "merkle-proof"
+        assert d["matches"], "renamed byte-identical copy must be picked up"
+        m = d["matches"][0]
+        assert m["file"] == "renamed.py"
+        assert m["merkle_proven"] is False
+        assert m["content_identical"] is True
+        assert m["identical_to"] == "src/core.py"
+
+    def test_evidence_edited_copy_stays_a_lead(self, tmp_path):
+        """Decision 1 regression: content that carries the token but whose bytes
+        are NOT identical to any recorded release file stays a bare lead (no
+        content_identical claim — hash equality is required for proof)."""
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "core.py").write_text("def init(): return 1\n")
+        priv = tmp_path / "priv.json"
+        r = run_canary("embed", "--source", str(tmp_path), "--project-id", "11",
+                       "--distribution-id", "lead", "--num-canaries", "2",
+                       "--output", str(priv), "--public-output", str(tmp_path / "pub.json"))
+        assert r.returncode == 0
+        manifest = json.loads(priv.read_text())
+        # plant a canary secret verbatim into a file whose bytes differ from every
+        # recorded release file: a lead, not content-proof.
+        secret = manifest["canary_tokens"][0]["secret"]
+        vsrc = tmp_path / "edited"
+        vsrc.mkdir()
+        (vsrc / "forked.py").write_text("def f():\n    pass\n# " + secret + "\n")
+        ev = tmp_path / "ev_lead.json"
+        r = run_canary("evidence", "--manifest", str(priv), "--suspect-source", str(vsrc),
+                       "--output", str(ev))
+        assert r.returncode == 0
+        d = json.loads(ev.read_text())
+        assert d["matches"], "token carried by an edited file should still be a lead"
+        m = d["matches"][0]
+        assert m["merkle_proven"] is False
+        assert m["content_identical"] is False
+
+    def test_hunt_failed_gh_is_not_no_copies(self, tmp_path):
+        """Decision 2: a broken `gh` (installed but errors / unauth) must exit
+        non-zero and never collapse to 'No copies found' (F1 false-safety)."""
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "a.py").write_text("def f(): return 1\n")
+        priv = tmp_path / "priv.json"
+        r = run_canary("embed", "--source", str(tmp_path), "--project-id", "12",
+                       "--distribution-id", "failgh", "--num-canaries", "1",
+                       "--output", str(priv), "--public-output", str(tmp_path / "pub.json"))
+        assert r.returncode == 0
+        bindir = tmp_path / "bin"
+        bindir.mkdir()
+        (bindir / "gh").write_text("#!/bin/sh\necho 'gh: not authenticated (HTTP 401)' >&2\nexit 1\n")
+        (bindir / "gh").chmod(0o755)
+        env = {**os.environ, "PATH": str(bindir) + os.pathsep + os.environ.get("PATH", "")}
+        r = run_canary_env(env, "hunt", "--manifest", str(priv))
+        assert r.returncode != 0
+        combined = r.stdout + r.stderr
+        assert "No copies found" not in r.stdout, "must not collapse a failure to 'no copies'"
+        assert "TOOL FAILURE" in combined
+        assert "could NOT be run" in combined
+
+    def test_hunt_missing_gh_is_explicit(self, tmp_path):
+        """Decision 2 regression: when `gh` is absent from PATH, hunt reports the
+        tool is missing (exit non-zero), never a clean 'no copies'."""
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "a.py").write_text("def f(): return 1\n")
+        priv = tmp_path / "priv.json"
+        r = run_canary("embed", "--source", str(tmp_path), "--project-id", "13",
+                       "--distribution-id", "nogh", "--num-canaries", "1",
+                       "--output", str(priv), "--public-output", str(tmp_path / "pub.json"))
+        assert r.returncode == 0
+        empty_bin = tmp_path / "emptybin"
+        empty_bin.mkdir()
+        env = {k: v for k, v in os.environ.items() if k != "PATH"}
+        env["PATH"] = str(empty_bin)
+        r = run_canary_env(env, "hunt", "--manifest", str(priv))
+        assert r.returncode != 0
+        combined = r.stdout + r.stderr
+        assert "No copies found" not in r.stdout
+        assert "not installed" in combined
+
+    def test_release_authentication_binding(self, tmp_path):
+        """Decision 3: the evidence package records whether the manifest is
+        authenticated, binds a matching signed commitment, and fails-closed
+        (without writing) on a non-binding one."""
+        from canary_embedder import _assess_release_authentication
+        root = "a" * 64
+        # none supplied -> unsigned
+        assert _assess_release_authentication(root, None)["signed"] is False
+        # matching signed commitment -> authenticated, binds
+        sc = tmp_path / "sc.json"
+        sc.write_text(json.dumps({"merkle_root": root}))
+        a = _assess_release_authentication(root, sc)
+        assert a["signed"] is True and a["merkle_root_binds"] is True
+        # mismatched commitment -> error, no binding
+        bad = tmp_path / "bad.json"
+        bad.write_text(json.dumps({"merkle_root": "b" * 64}))
+        a2 = _assess_release_authentication(root, bad)
+        assert a2["signed"] is False and a2.get("error")
+        # missing file -> FileNotFoundError
+        with pytest.raises(FileNotFoundError):
+            _assess_release_authentication(root, tmp_path / "nope.json")
+
+    def test_evidence_signed_commitment_binds_via_cli(self, tmp_path):
+        """Decision 3 CLI path: with a matching signed commitment the evidence
+        package records release_authentication.signed == True."""
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "core.py").write_text("def init(): return 1\n")
+        priv = tmp_path / "priv.json"
+        r = run_canary("embed", "--source", str(tmp_path), "--project-id", "14",
+                       "--distribution-id", "signed", "--num-canaries", "2",
+                       "--output", str(priv), "--public-output", str(tmp_path / "pub.json"))
+        assert r.returncode == 0
+        root = json.loads(priv.read_text())["merkle_root"]
+        sc = tmp_path / "sc.json"
+        sc.write_text(json.dumps({"merkle_root": root}))
+        vsrc = tmp_path / "vsrc"
+        (vsrc / "src").mkdir(parents=True)
+        shutil.copy2(tmp_path / "src" / "core.py", vsrc / "src" / "core.py")
+        ev = tmp_path / "ev.json"
+        r = run_canary("evidence", "--manifest", str(priv), "--suspect-source", str(vsrc),
+                       "--output", str(ev), "--signed-commitment", str(sc))
+        assert r.returncode == 0
+        d = json.loads(ev.read_text())
+        assert d["release_authentication"]["signed"] is True
+        assert d["release_authentication"]["merkle_root_binds"] is True
+
+    def test_evidence_nonbinding_commitment_fails_closed(self, tmp_path):
+        """Decision 3 fail-closed: a signed commitment that does NOT bind this
+        manifest's merkle_root must exit non-zero and NOT write the package."""
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "core.py").write_text("def init(): return 1\n")
+        priv = tmp_path / "priv.json"
+        r = run_canary("embed", "--source", str(tmp_path), "--project-id", "15",
+                       "--distribution-id", "nobind", "--num-canaries", "2",
+                       "--output", str(priv), "--public-output", str(tmp_path / "pub.json"))
+        assert r.returncode == 0
+        sc = tmp_path / "sc.json"
+        sc.write_text(json.dumps({"merkle_root": "f" * 64}))  # wrong root
+        vsrc = tmp_path / "vsrc"
+        (vsrc / "src").mkdir(parents=True)
+        shutil.copy2(tmp_path / "src" / "core.py", vsrc / "src" / "core.py")
+        ev = tmp_path / "ev.json"
+        r = run_canary("evidence", "--manifest", str(priv), "--suspect-source", str(vsrc),
+                       "--output", str(ev), "--signed-commitment", str(sc))
+        assert r.returncode == 2
+        assert not ev.exists(), "non-binding signed commitment must not write a package"
+        assert "REJECTED" in r.stderr
 
 
 # ---------------------------------------------------------------------------

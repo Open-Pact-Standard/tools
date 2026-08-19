@@ -545,22 +545,32 @@ def cmd_build_merkle(args: argparse.Namespace) -> None:
         print(f"  Leaf:   0x{token.get('merkle_leaf', leaves[i])}")
         print(f"  Proof:  {[f'0x{p}' for p in proof]}")
 
-def _gh_search_code(query: str) -> list[str]:
-    """Run `gh search code '<q>'` and return '<repo>:<path>' matches.
+def _gh_search_code(query: str) -> tuple[list[str], str]:
+    """Run `gh search code '<q>'`.
 
-    Returns [] if gh is unavailable or the search returns nothing. Never raises:
-    a broken GH path is treated as 'no evidence here' but is surfaced by the
-    caller as a blind spot, not a crash.
+    Returns (hits, state) where state is one of:
+      'ok'            -> `gh` ran and the query was answered (hits may be empty)
+      'gh_missing'    -> `gh` CLI is not installed / not on PATH
+      'search_failed' -> `gh` ran but errored (not authed, network, rate-limit)
+
+    This deliberately distinguishes \"search ran and found nothing\" from \"search
+    could not run\". Collapsing the latter to '[]\" would be F1 false-safety: a
+    broken tool must never impersonate a clean sweep.
     """
     try:
         r = _subprocess.run(["gh", "search", "code", query, "--limit", "100"],
                             capture_output=True, text=True, timeout=60)
-    except (FileNotFoundError, _subprocess.SubprocessError):
-        return []  # caller prints the blind-spot note
+    except FileNotFoundError:
+        return [], "gh_missing"
+    except _subprocess.SubprocessError:
+        return [], "search_failed"
     if r.returncode != 0:
-        return []
+        return [], "search_failed"
     # gh search code prints 'owner/repo:path' lines
-    return [ln.strip() for ln in r.stdout.splitlines() if ":" in ln and ln.strip()]
+    return (
+        [ln.strip() for ln in r.stdout.splitlines() if ":" in ln and ln.strip()],
+        "ok",
+    )
 
 
 def cmd_hunt(args: argparse.Namespace) -> None:
@@ -568,9 +578,15 @@ def cmd_hunt(args: argparse.Namespace) -> None:
     literals from a PRIVATE manifest so an owner can find copies without being
     handed a suspect directory.
 
+    DE-SCOPED / NOT PRODUCT: this is a standalone triage tool, NOT part of the
+    enforcement product or the signed evidence chain. It is kept because the
+    source is already here, but it must not grow product features. It never
+    produces evidence (a hit is a LEAD; only `verify` + `evidence` prove).
+
+    Tool-state honesty (no F1 false-safety): a failed/missing `gh` is reported
+    loudly and exits non-zero, NEVER collapsed to \"No copies found\".
     Blind-spot honesty (LP#8): this is a *triage net*, not proof. It only sees
     public GitHub repos; private forks and variable-encoded canaries are missed.
-    A match here is a LEAD — confirm with `verify` + `evidence` (Merkle proof).
     """
     manifest_path = Path(args.manifest)
     if not manifest_path.exists():
@@ -591,13 +607,23 @@ def cmd_hunt(args: argparse.Namespace) -> None:
     print("=" * 60)
 
     found: dict[str, list[str]] = {}
-    for t in tokens:
-        hits = _gh_search_code(t)
-        if hits:
+    for i, t in enumerate(tokens):
+        hits, state = _gh_search_code(t)
+        if state != "ok":
+            reason = ("`gh` CLI is not installed / not on PATH"
+                      if state == "gh_missing"
+                      else "`gh` ran but errored (not authenticated, network, or rate-limited)")
+            print(f"\nError: GitHub code search could NOT be run: {reason}.",
+                  file=sys.stderr)
+            print(f"  Aborted after {i} of {len(tokens)} token(s). This is a TOOL "
+                  f"FAILURE, not a 'no copies' result.", file=sys.stderr)
+            print("  Nothing found, but nothing was searched by this tool either.",
+                  file=sys.stderr)
+            sys.exit(1)
+        for hit in hits:
             # dedupe owner/repo -> list of paths
-            for hit in hits:
-                repo, _, path = hit.partition(":")
-                found.setdefault(repo, []).append(path)
+            repo, _, path = hit.partition(":")
+            found.setdefault(repo, []).append(path)
 
     if not found:
         print("\nNo copies found on GitHub code search.")
@@ -623,6 +649,19 @@ def verify_evidence_gate(manifest_data: dict, source_dir: Path,
     """LP#8 balancing gate: turn 'token hits' into 'evidence' only when the
     Merkle proof closes. A bare matched token is a lead; returning it as evidence
     requires the file hash to match the recorded fingerprint.
+
+    Evidence strength tiers (deliberate — see docs/W4-integrity-decisions.md):
+      merkle_proven=True   path AND content match a recorded release file
+                           (strong evidence: handover of the exact file at the
+                           same relative path, Merkle path-binding intact).
+      content_identical    content match against a recorded release file under
+                           a DIFFERENT path (a rename). sha3_256 hash equality
+                           cryptographically proves byte-identity, so this is a
+                           provable fact and must not be downgraded to a bare
+                           lead — it is simply not Merkle path-bound. The
+                           recorded path it matches is recorded in `identical_to`.
+      neither              a token literal is present but the bytes are no
+                           longer identical to any recorded release file: a lead.
     """
     salt = manifest_data.get("_steward_secret_salt", "")
     embedder = CanaryEmbedder(
@@ -644,6 +683,19 @@ def verify_evidence_gate(manifest_data: dict, source_dir: Path,
     else:
         matches = embedder.verify_source(source_dir, CanaryManifest(**manifest_obj))
 
+    # Normalize recorded source_files (path -> hash string; tolerate the older
+    # nested-dict shape) once, and build a reverse hash -> [paths] index so a
+    # renamed suspect file can be matched by content (byte-identity via sha3_256).
+    source_files = manifest_data.get("source_files", {})
+    rec_map: dict[str, str | None] = {}
+    for _k, _v in (source_files or {}).items():
+        rec_map[_k] = _v if isinstance(_v, str) else ((_v or {}).get("sha3_256")
+                       if isinstance(_v, dict) else None)
+    by_hash: dict[str, list[str]] = {}
+    for _p, _h in rec_map.items():
+        if _h:
+            by_hash.setdefault(_h, []).append(_p)
+
     # require the literal to still be recoverable (proves the file carries the
     # token) — a grep hit on a stale line that no longer holds the token is a
     # mismatch and must not be recorded as evidence.
@@ -655,16 +707,24 @@ def verify_evidence_gate(manifest_data: dict, source_dir: Path,
         except OSError:
             continue
         if secret in content and fp not in files_seen:
-            # require the file's hash to match the recorded fingerprint (Merkle proof)
+            # hash the actual file: match it against the recorded fingerprints
             ph = hashlib.sha3_256(content.encode()).hexdigest()
-            # source_files is filename -> hash STRING (dict[str,str]); guard the shape
-            rec = manifest_data.get("source_files", {}).get(fp)
-            rec = rec if isinstance(rec, str) else (rec or {}).get("sha3_256") if isinstance(rec, dict) else None
             row: dict[str, object] = {"file": fp, "secret": secret}
-            if rec and ph == rec:
+            same_path_rec = rec_map.get(fp)
+            if ph and same_path_rec and ph == same_path_rec:
+                # path AND content match the recorded release file -> Merkle proof.
                 row["merkle_proven"] = True
+                row["content_identical"] = True
+                row["identical_to"] = fp
             else:
                 row["merkle_proven"] = False
+                # renamed (or relocated) but byte-identical to a recorded file re-
+                # lease -> provable by hash equality, though not path-bound.
+                if ph and by_hash.get(ph):
+                    row["content_identical"] = True
+                    row["identical_to"] = by_hash[ph][0]
+                else:
+                    row["content_identical"] = False
             proven.append(row)
             files_seen.add(fp)
     return {
@@ -835,6 +895,61 @@ def cmd_fingerprint(args: argparse.Namespace) -> None:
     print(f"  merkle_root: 0x{fingerprint['merkle_root']}")
 
 
+def _assess_release_authentication(manifest_merkle_root: str,
+                                   signed_commitment_path: Path | None) -> dict:
+    """Decide how the evidence package records release authentication.
+
+    The canary (Python, stdlib-only) tool does NOT perform cryptographic signing
+    or signature verification — that lives in origin-canary (Rust, Ed25519 +
+    Falcon-1024) and must be verified with `origin-canary verify-commitment`.
+    The deliberate policy is:
+
+      - Evidence does NOT hard-require a signature: the Merkle/token-presence
+        match is the probative fact of copying and is valid standalone on the
+        public payload.
+      - But a supplied signed commitment MUST bind to THIS manifest's merkle_root.
+        A signed commitment that disagrees with the manifest would make the
+        evidence package internally self-contradictory, so it is a hard error
+        (fail-closed). It is never silently accepted.
+      - The package always records whether the manifest's merkle_root is auth-
+        enticated, so a user never mistakes an unsigned record for a signed one.
+    """
+    if signed_commitment_path is None:
+        return {
+            "signed": False,
+            "note": "manifest merkle_root not cryptographically authenticated in this "
+                    "package. Cryptographic signing lives in origin-canary; verify "
+                    "with `origin-canary verify-commitment` and supply the signed "
+                    "commitment via --signed-commitment to authenticate this record.",
+        }
+    if not signed_commitment_path.exists():
+        raise FileNotFoundError(f"--signed-commitment not found: {signed_commitment_path}")
+    try:
+        data = json.loads(signed_commitment_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        raise ValueError(f"--signed-commitment is not readable JSON: {e}") from e
+    commit_root = (data.get("merkle_root") or data.get("release_root")
+                   or (data.get("commitment") or {}).get("merkle_root"))
+    if not commit_root:
+        raise ValueError(
+            "--signed-commitment has no recognisable 'merkle_root' field; this is not "
+            "an origin-canary commitment file.")
+    if commit_root != manifest_merkle_root:
+        # fail-closed: the package must never record authentication it cannot bind.
+        return {"signed": False, "merkle_root_binds": False,
+                "bound_root": commit_root, "manifest_root": manifest_merkle_root,
+                "error": "signed commitment merkle_root does NOT match this manifest"}
+    return {
+        "signed": True,
+        "signed_commitment_file": signed_commitment_path.name,
+        "merkle_root_binds": True,
+        "note": "commitment merkle_root binds to this manifest. The Ed25519 + "
+                "Falcon-1024 SIGNATURES themselves must be verified with "
+                "`origin-canary verify-commitment`; this stdlib-only tool only "
+                "cross-checks the merkle_root binding.",
+    }
+
+
 def cmd_evidence(args: argparse.Namespace) -> None:
     manifest_path = Path(args.manifest)
     suspect = Path(args.suspect_source)
@@ -844,21 +959,53 @@ def cmd_evidence(args: argparse.Namespace) -> None:
     if not suspect.is_dir():
         print(f"Error: {suspect} is not a directory", file=sys.stderr)
         sys.exit(1)
+    if getattr(args, "signed_commitment", None):
+        sc = Path(args.signed_commitment)
+        if not sc.exists():
+            print(f"Error: --signed-commitment not found: {sc}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        sc = None
     manifest_data = _load_manifest(manifest_path)
     # LP#8 balancing gate: every recorded match must be a token literal still
     # present in the file (a stale/derived hit is NOT evidence), and is flagged
-    # merkle_proven only when its hash equals the recorded fingerprint.
+    # merkle_proven only when its hash AND path equal the recorded fingerprint.
     matched_files = list(args.matched_files) if getattr(args, "matched_files", None) else None
     evidence = verify_evidence_gate(manifest_data, suspect, matched_files)
+    # Signed-vs-unsigned evidence policy (decision 3): authenticate the record's
+    # merkle_root when a signed commitment is supplied and it binds; never accept
+    # a non-binding one; always state the authentication state.
+    try:
+        evidence["release_authentication"] = _assess_release_authentication(
+            str(manifest_data.get("merkle_root", "")), sc)
+    except (FileNotFoundError, ValueError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    auth = evidence["release_authentication"]
+    if auth.get("error"):
+        # fail-closed: a supplied signed commitment that does NOT bind this
+        # manifest's merkle_root makes the package internally self-contradictory.
+        # It must never be written out as a litigation artifact.
+        print(f"Error: release authentication REJECTED — {auth['error']}.", file=sys.stderr)
+        print("  Refusing to write evidence with a non-binding signed commitment.", file=sys.stderr)
+        sys.exit(2)
     output = Path(args.output)
     output.write_text(json.dumps(evidence, indent=2))
     print(f"Evidence package written to: {output}")
     proven = sum(1 for m in evidence["matches"] if m.get("merkle_proven"))
-    print(f"  Matches: {evidence['match_count']}  |  Merkle-proven: {proven}")
-    unproven = evidence["match_count"] - proven
-    if unproven:
-        print(f"  ⚠ {unproven} match(es) NOT merkle-proven (file hash differs from release) — "
-              f"treat as leads, not proof.")
+    content = sum(1 for m in evidence["matches"] if m.get("content_identical"))
+    print(f"  Matches: {evidence['match_count']}  |  Merkle-proven: {proven}"
+          f"  |  Content-identical (renamed): {content - proven}")
+    if auth.get("signed"):
+        print("  Release record: AUTHENTICATED (signed commitment merkle_root binds).")
+        print(f"    {auth['note']}")
+    else:
+        print("  Release record: UNSIGNED (not cryptographically authenticated here) — "
+              "see --signed-commitment.")
+    unproven_lead = evidence["match_count"] - content
+    if unproven_lead:
+        print(f"  ⚠ {unproven_lead} match(es) neither merkle-proven nor content-identical "
+              f"(bytes differ from release) — treat as leads, not proof.")
 
 
 def main() -> None:
@@ -932,6 +1079,7 @@ tips:
     evidence_p.add_argument('--suspect-source', required=True, help='Source directory where canaries were found')
     evidence_p.add_argument('--output', required=True, help='Output evidence package JSON path')
     evidence_p.add_argument('--matched-files', nargs='+', help='Specific files where canaries were matched (optional; if omitted, re-scans)')
+    evidence_p.add_argument('--signed-commitment', help='Path to an origin-canary signed commitment (canary_commitment.json) to authenticate the manifest\'s merkle_root. Its merkle_root MUST match this manifest or evidence is rejected as self-contradictory.')
     evidence_p.set_defaults(func=cmd_evidence)
 
     hunt_p = subparsers.add_parser('hunt', help='Proactively search GitHub for token literals from a private manifest')
