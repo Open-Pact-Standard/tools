@@ -162,7 +162,11 @@ def main() -> None:
 
     # 2. SPDX headers
     print("\n  [2/5] Injecting SPDX headers...")
-    r = _run_tool("opl_spdx_inject.py", str(root), "--license", "OPL-1.4", cwd=root)
+    # NOTE: the inject tool's flag is --license-version (it prepends "OPL-"
+    # itself). Passing "--license OPL-1.4" lets argparse prefix-match to
+    # --license-version and yields the invalid id "OPL-OPL-1.4". Pass a bare
+    # version so the header reads "SPDX-License-Identifier: OPL-1.4".
+    r = _run_tool("opl_spdx_inject.py", str(root), "--license-version", "1.4", cwd=root)
     if r.returncode != 0:
         print(r.stderr)
         sys.exit(1)
@@ -194,12 +198,38 @@ def main() -> None:
             print(r.stderr)
         # opl_check returns 0 with --skip-remote; any ERROR-level line is a real problem.
         if "0 errors" in r.stdout:
-            print("  VERDICT: adoption complete and self-consistent. "
-                  "Publish your Standard Terms page, then commit.")
+            _print_next_steps(root, args)
         else:
             print("  VERDICT: adoption ran but opl_check reported errors — review above.")
-    else:
-        print("\n  [5/5] Skipped final check (--skip-check).")
+
+
+def _print_next_steps(root: Path, args) -> None:
+    """Plain-language, numbered guidance for the maintainer. Answers the
+    questions a first-time adopter actually has: what did I get, what do I do
+    now, and is there a key/token to store (there isn't)."""
+    print("\n" + "=" * 64)
+    print("  OPL ADOPTION COMPLETE — what you now have & what to do")
+    print("=" * 64)
+    print("\n  Your repo now contains (no key, token, or account needed):")
+    print("    1. LICENSE        — canonical Open-Pact License v1.4 text")
+    print("    2. NOTICE         — names you as maintainer, your jurisdiction,")
+    print("                       your Standard Terms URL, and OPL-AI choice")
+    print("    3. SPDX headers   — every source file now carries")
+    print("                       'SPDX-License-Identifier: OPL-1.4'")
+    print("    4. Manifests      — package files set license = OPL-1.4")
+    print("\n  You are the licensor by publishing these files. There is NO")
+    print("  license key to store, no account, nothing to lose or forget.")
+    print("\n  Your 3 next steps as maintainer:")
+    print("    1. PUBLISH your Standard Terms page at:")
+    print(f"         {args.terms_url or '(you did not set --terms-url — pick one)'}")
+    print("       This is the one external dependency: commercial users are")
+    print("       directed to YOUR pricing page. (A static HTML page is enough.)")
+    print("    2. COMMIT the four artifacts above.")
+    print("    3. (Optional) Tag a release noting 'now under OPL-1.4'.")
+    print("\n  To validate later, or if you suspect copying: run")
+    print("     python3 tools/opl_check.py .            # tamper/local check")
+    print("     python3 canary_embedder.py verify ...   # theft check (if canary used)")
+    print("=" * 64)
 
 
 if __name__ == "__main__":
