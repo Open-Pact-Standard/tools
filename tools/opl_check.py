@@ -276,7 +276,18 @@ def main() -> None:
         results.append(check_standard_terms_url(root, offline=True))
     else:
         results.append(check_standard_terms_url(root))
-    results.append(check_spdx_headers(root, args.exclude))
+    # Default excludes: OPL-generated artifacts that are not authored source and
+    # must not be graded for SPDX headers (e.g. the published terms page, NOTICE).
+    default_excludes = [
+        r"(^|/)NOTICE(\..*)?$",
+        r"(^|/)LICENSE(\..*)?$",
+        r"(^|/)standard-terms\.html$",
+        r"(^|/)COMMERCIAL\.md$",
+        r"(^|/)README(\..*)?$",
+        r"(^|/)\..*$",  # dotfiles
+    ]
+    exclude = list(args.exclude) + default_excludes
+    results.append(check_spdx_headers(root, exclude))
     results.append(check_opl_ai(root))
 
     if args.json:
