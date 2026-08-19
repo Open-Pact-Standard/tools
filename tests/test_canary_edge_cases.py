@@ -1159,3 +1159,33 @@ class TestCanaryCheckScript:
         assert "COMMERCIAL use REQUIRES payment" in out
         assert "https://acme.dev/terms" in out
         assert "OPL-AI is OPTED IN" in out
+
+    def test_opl_adopt_canary_embeds_tokens_on_rust_repo(self, tmp_path):
+        # C1/C2: --canary wires origin-canary into adopt on a Rust repo.
+        # Skips gracefully if origin-canary binary is unavailable.
+        import shutil as _sh
+        src = Path(os.environ.get("ORIGIN_TOOLS_REAL", "/home/ikaaros/Coding/Gold/origin-tools"))
+        if not src.is_dir():
+            pytest.skip("origin-tools real repo not present")
+        repo = tmp_path / "origin-tools"
+        _sh.copytree(src, repo, ignore=_sh.ignore_patterns("target", ".git", "node_modules"))
+        # origin-canary must be discoverable
+        binp = (Path.home() / ".cargo" / "bin" / "origin-canary")
+        if not binp.exists():
+            binp = Path.home() / "Coding" / "Gold" / "origin-tools" / "target" / "release" / "origin-canary"
+        if not binp.exists():
+            pytest.skip("origin-canary binary not built")
+        r = subprocess.run(
+            [sys.executable, str(Path(TOOLS_DIR) / "tools" / "opl_adopt.py"), str(repo),
+             "--maintainer", "Test <t@t.dev>", "--jurisdiction", "United States",
+             "--terms-url", "https://t.dev/terms", "--opl-ai", "in", "--canary",
+             "--project-id", "7"],
+            capture_output=True, text=True, timeout=200)
+        assert r.returncode == 0, r.stderr[-500:]
+        manifest = repo / ".canary" / "canary_manifest.json"
+        assert manifest.exists(), "canary manifest should exist after --canary adopt"
+        assert "variable.rust" in r.stdout  # strategy auto-fit to Rust
+        # opl_check must stay clean (no SPDX error on the manifest)
+        rc = subprocess.run([sys.executable, str(Path(TOOLS_DIR) / "tools" / "opl_check.py"),
+                             str(repo), "--skip-remote"], capture_output=True, text=True, timeout=30)
+        assert "0 errors" in rc.stdout, rc.stdout

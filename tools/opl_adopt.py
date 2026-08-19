@@ -16,6 +16,7 @@ Reuses opl_init / opl_spdx_inject / opl_check rather than duplicating logic.
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -51,11 +52,53 @@ MANIFEST_LICENSE_FIELDS = {
 
 
 def _run_tool(name: str, *args: str, cwd: Path | None = None) -> subprocess.CompletedProcess:
-    tool = Path(__file__).parent / name
+    tool = Path(__file__).resolve().parent / name
     return subprocess.run(
         [sys.executable, str(tool), *args],
         capture_output=True, text=True, cwd=str(cwd) if cwd else None,
     )
+
+
+def _find_origin_canary() -> Path | None:
+    """Locate the origin-canary binary (Rust, in origin-tools) on PATH or known
+    locations. Returns the path or None if absent."""
+    import shutil
+    on_path = shutil.which("origin-canary")
+    if on_path:
+        return Path(on_path)
+    for cand in [
+        Path.home() / ".cargo" / "bin" / "origin-canary",
+        Path.home() / "Coding" / "Gold" / "origin-tools" / "target" / "release" / "origin-canary",
+    ]:
+        if cand.exists():
+            return cand
+    return None
+
+
+def _infer_canary_strategies(root: Path) -> str:
+    """Pick canary strategies that FIT the repo's actual languages. The default
+    polyglot set (variable.python,variable.javascript,watermark,deadcode.python)
+    FAILS on mono-language trees (e.g. a Rust crate has no .js). Map detected
+    extensions to strategies origin-canary actually supports."""
+    ext_lang = {
+        ".py": "variable.python", ".js": "variable.javascript",
+        ".ts": "variable.javascript", ".rs": "variable.rust",
+        ".go": "variable.python",  # fallback; watermark covers most
+    }
+    found = set()
+    for r, _, fs in os.walk(root):
+        if "/.git/" in r or "/target/" in r:
+            continue
+        for f in fs:
+            ext = os.path.splitext(f)[1].lower()
+            if ext in ext_lang:
+                found.add(ext_lang[ext])
+    # watermark works everywhere (it writes a comment); always include it.
+    strat = [s for s in found if s] + ["watermark"]
+    # de-dup, preserve order
+    seen = set()
+    ordered = [s for s in strat if not (s in seen or seen.add(s))]
+    return ",".join(ordered) if ordered else "watermark"
 
 
 def swap_license(root: Path, dry_run: bool) -> str:
@@ -125,8 +168,15 @@ def main() -> None:
                         help="Show what would change without modifying files.")
     parser.add_argument("--skip-check", action="store_true",
                         help="Do not run opl_check at the end.")
+    parser.add_argument("--canary", action="store_true",
+                        help="C1/C2: also embed canary tokens + manifest via origin-canary "
+                             "(if the binary is available). Closes the adopt->canary gap so the "
+                             "OPL-AI enforcement clause is actually fulfillable.")
+    parser.add_argument("--project-id", default="1",
+                        help="Canary project ID (stable integer; recorded in the manifest).")
+    parser.add_argument("--distribution-id", default="",
+                        help="Canary distribution ID (e.g. release tag). Defaults to a timestamp.")
     args = parser.parse_args()
-
     root = Path(args.directory).resolve()
     if not root.is_dir():
         print(f"Error: {root} is not a directory", file=sys.stderr)
@@ -187,6 +237,42 @@ def main() -> None:
     else:
         print("    No package manifests with a license field found.")
 
+    # 4.5 Canary tokens (C1/C2) — embed via origin-canary if requested & available.
+    if args.canary and not args.dry_run:
+        print("\n  [4.5] Embedding canary tokens (origin-canary)...")
+        bin_path = _find_origin_canary()
+        if bin_path is None:
+            print("    [SKIP] origin-canary not found on PATH or in "
+                  "~/.cargo/bin/origin-canary. Skipping canary embed. "
+                  "Install origin-canary to enable token enforcement.")
+        else:
+            import time, secrets
+            dist = args.distribution_id or time.strftime("%Y%m%dT%H%M%S")
+            # Salt MUST be generated locally and kept OFFLINE (it is the secret
+            # half of the canary; never commit it). origin-canary requires it.
+            salt = secrets.token_hex(16)
+            man_out = root / ".canary" / "canary_manifest.json"
+            man_out.parent.mkdir(parents=True, exist_ok=True)
+            # Pick strategies that FIT the repo's actual languages, so embed
+            # doesn't fail on a mono-language tree (e.g. Rust has no .js).
+            strategies = _infer_canary_strategies(root)
+            r = subprocess.run(
+                [str(bin_path), "embed",
+                 "--source", str(root),
+                 "--project-id", str(args.project_id),
+                 "--distribution-id", dist,
+                 "--salt", salt,
+                 "--strategies", strategies,
+                 "--manifest-out", str(man_out)],
+                capture_output=True, text=True, cwd=str(root))
+            if r.returncode == 0:
+                print(f"    Canary tokens embedded ({strategies}); manifest at {man_out}")
+                print("    Keep the salt OFFLINE: " + salt)
+                print("    The manifest is PRIVATE (contains secrets) — never commit it.")
+            else:
+                print("    [WARN] origin-canary embed failed:")
+                print("    " + r.stderr.strip().replace("\n", "\n    "))
+
     # 5. Final check
     if not args.skip_check:
         print("\n  [5/5] Running opl_check for a final verdict...")
@@ -226,9 +312,14 @@ def _print_next_steps(root: Path, args) -> None:
     print("       directed to YOUR pricing page. (A static HTML page is enough.)")
     print("    2. COMMIT the four artifacts above.")
     print("    3. (Optional) Tag a release noting 'now under OPL-1.4'.")
-    print("\n  To validate later, or if you suspect copying: run")
-    print("     python3 tools/opl_check.py .            # tamper/local check")
-    print("     python3 canary_embedder.py verify ...   # theft check (if canary used)")
+    if getattr(args, "canary", False):
+        print("    4. (Canary) Store the salt OFFLINE; keep .canary/canary_manifest.json")
+        print("       PRIVATE (never commit it). To verify later or if you suspect copying:")
+        print("         origin-canary verify --source . --manifest .canary/canary_manifest.json")
+        print("       Re-run `opl_adopt --canary` on each release to refresh tokens.")
+    else:
+        print("\n  To validate later, or if you suspect copying: run")
+        print("     python3 tools/opl_check.py .            # tamper/local check")
     print("=" * 64)
 
 

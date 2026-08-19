@@ -284,7 +284,8 @@ def main() -> None:
         r"(^|/)standard-terms\.html$",
         r"(^|/)COMMERCIAL\.md$",
         r"(^|/)README(\..*)?$",
-        r"(^|/)\..*$",  # dotfiles
+        # dotfiles and dot-dirs at ANY path depth (e.g. .canary/, .git/, .env)
+        r"(^|/)\.[^/]+($|/)",
     ]
     exclude = list(args.exclude) + default_excludes
     results.append(check_spdx_headers(root, exclude))
