@@ -972,3 +972,36 @@ class TestCanaryCheckScript:
             capture_output=True, text=True,
         )
         assert proc.returncode == 1
+
+    def test_embed_single_line_docstring_files_still_parse(self, tmp_path):
+        # C1 regression: single-line docstring watermark must NOT produce IndentationError.
+        src = tmp_path / "src"; src.mkdir()
+        (src / "app.py").write_text(
+            '"""single-line."""\n'
+            'import os\n'
+            '\n'
+            'def f():\n'
+            '    return 1\n'
+        )
+        out = tmp_path / "m.json"
+        r = run_canary(
+            "embed",
+            "--source", str(tmp_path),
+            "--project-id", "1",
+            "--distribution-id", "c1_regression",
+            "--salt", "salt",
+            "--num-canaries", "2",
+            "--output", str(out),
+            "--public-output", str(tmp_path / "p.json"),
+            "--strategies", "watermark",
+        )
+        assert r.returncode == 0
+        # Ensure the embedded file still parses (no SyntaxError/IndentationError).
+        import ast
+        content = (src / "app.py").read_text()
+        try:
+            ast.parse(content)
+        except SyntaxError as e:
+            raise AssertionError(f"Embedded single-line-docstring .py does not parse: {e}")
+        # Quick sanity: the reference is comment-prefixed, not bare.
+        assert "# Internal reference:" in content or "# Module reference:" in content
