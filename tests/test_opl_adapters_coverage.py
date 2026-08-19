@@ -134,7 +134,7 @@ class TestAdopt1Cmd:
         assert res.ok is True
         body = res.messages[0] if res.messages else ""
         assert "OPL Adopt" in body
-        assert "VERDICT" in res.consequence
+        assert "OPL ADOPTION COMPLETE" in res.messages[0]
         # Dry-run semantics (matches opl_adopt): NOTICE + SPDX always run, but the
         # destructive swaps are skipped — LICENSE and manifest license field stay MIT.
         assert (tmp_path / "NOTICE").exists()
