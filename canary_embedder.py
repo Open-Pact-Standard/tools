@@ -678,8 +678,9 @@ def cmd_hunt(args: argparse.Namespace) -> None:
         print("\n  ⚠ BLIND SPOTS (this is NOT proof of no theft):")
         print("   • code search indexes PUBLIC GitHub repos only")
         print("   • private forks, non-GitHub hosts, and non-Python artifacts are missed")
-        print("   • variable-encoded canaries are not text-searchable (watermark ones are)")
-        print("\n  A 'no match' here means 'not found in public GitHub' — not 'safe.'")
+        print("   • variable-encoded canaries are not directly text-searchable on GitHub")
+        print("     (but verify CAN detect them from their derived markers)")
+        print("\n  A 'no match' here means 'not found in public GitHub' — not 'safe'.")
         sys.exit(0)
 
     print("\nFOUND copies (THEFT CANDIDATES — leads, not proof):")

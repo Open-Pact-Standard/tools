@@ -1051,3 +1051,49 @@ class TestCanaryCheckScript:
         vr = run_canary("verify", "--source", str(tmp_path), "--manifest", str(out))
         assert vr.returncode == 0
         assert "FOUND 1 CANARY TOKEN MATCH" in vr.stdout
+
+    def test_verify_still_detects_watermark(self, tmp_path):
+        # H1 regression: verify must still detect watermark tokens after adding
+        # variable/deadcode detection (no regressions).
+        src = tmp_path / "src"; src.mkdir()
+        (src / "app.py").write_text('import os\n')
+        out = tmp_path / "m.json"
+        r = run_canary(
+            "embed",
+            "--source", str(tmp_path),
+            "--project-id", "1",
+            "--distribution-id", "h1_watermark_regression",
+            "--salt", "salt",
+            "--num-canaries", "1",
+            "--output", str(out),
+            "--public-output", str(tmp_path / "p.json"),
+            "--strategies", "watermark",  # embed ONLY watermark
+        )
+        assert r.returncode == 0
+        vr = run_canary("verify", "--source", str(tmp_path), "--manifest", str(out))
+        assert vr.returncode == 0
+        assert "FOUND 1 CANARY TOKEN MATCH" in vr.stdout
+
+    def test_verify_detects_all_strategies_in_mixed_tree(self, tmp_path):
+        # H1 regression: verify must detect all three strategies when they're
+        # mixed in the same tree (realistic deployment scenario).
+        src = tmp_path / "src"; src.mkdir()
+        # Need enough content for deadcode embedder to target a function.
+        (src / "app.py").write_text('import os\n\ndef f():\n    return 1\n')
+        out = tmp_path / "m.json"
+        r = run_canary(
+            "embed",
+            "--source", str(tmp_path),
+            "--project-id", "1",
+            "--distribution-id", "h1_mixed_regression",
+            "--salt", "salt",
+            "--num-canaries", "1",
+            "--output", str(out),
+            "--public-output", str(tmp_path / "p.json"),
+            "--strategies", "watermark,variable,deadcode",  # all three
+        )
+        assert r.returncode == 0
+        vr = run_canary("verify", "--source", str(tmp_path), "--manifest", str(out))
+        assert vr.returncode == 0
+        # Should find 1 token (the same token embedded with all three strategies).
+        assert "FOUND 1 CANARY TOKEN MATCH" in vr.stdout
